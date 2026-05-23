@@ -9,6 +9,12 @@ import { resolveRecipeToMealItem } from "./src/domain/nutrition/recipeEngine";
 import { Recipe, MealItem, FoodItem } from "./src/domain/nutrition/foodTypes";
 import { calculateBaseline } from "./src/services/analysisEngine/baselines";
 import { triggerSyncHelper } from "./src/store/useStore";
+import { convertPortionToGrams } from "./src/domain/nutrition/portionConversion";
+import { convertCookingState } from "./src/domain/nutrition/cookingYield";
+import { validateAndCleanRecipeDraft } from "./src/domain/nutrition/recipeDraftSchema";
+import { validateAndCleanMealPhotoDraft } from "./src/domain/nutrition/mealPhotoDraftSchema";
+import { validateAndCleanOcrDraft } from "./src/domain/nutrition/ocrDraftSchema";
+import { matchFoodCandidates, calculateMatchScore } from "./src/domain/nutrition/matchFoodCandidates";
 import "./src/domain/safety/wordingPolicy.test";
 
 console.log("====================================================");
@@ -310,7 +316,90 @@ const clearedLogs = mockState.mealLogs.filter(l => l.id !== "meal_l1");
 assert.strictEqual(clearedLogs.length, originCount - 1, "La suppression directe vide l'item de mémoire.");
 console.log("✅ 28. GDPR Purging: Suppression unitaire et purge globale des données vérifiées.");
 
+// Test 29: Portion Conversion (Etape 4.3)
+const bananaConv = convertPortionToGrams("banane", 2, "piece");
+assert.strictEqual(bananaConv.grams, 118 * 2, "Deux bananes moyennes doivent peser 236g.");
+assert.ok(bananaConv.confidence >= 80, "La confiance des bananes doit être au moins de 80%.");
+
+const oilConv = convertPortionToGrams("huile_olive", 1, "cs");
+assert.strictEqual(oilConv.grams, 13.6, "1 cuillère à soupe d'huile d'olive doit faire 13.6g.");
+
+const milkConv = convertPortionToGrams("lait_vache", 200, "ml");
+assert.strictEqual(milkConv.grams, 200 * 1.03, "Le lait de vache a une densité de 1.03 g/ml (206g pour 200ml).");
+
+const userCustomUnit = convertPortionToGrams("whey_isolate", 3, "bol_whey", [
+  { id: "bol_whey", foodId: "whey_isolate", label: "bol_whey", gramsEquivalent: 50, unitType: "serving", confidence: 95 }
+]);
+assert.strictEqual(userCustomUnit.grams, 150, "Une portion customisée de 50g x 3 doit résulter en 150g.");
+console.log("✅ 29. Portion Conversion: Les cas banane, huile, lait, et portions utilisateur sont validés.");
+
+// Test 30: Cooking Yield Cru/Cuit (Etape 4.4)
+const pastaYield = convertCookingState(100, "pates_crues", "cooked");
+assert.strictEqual(pastaYield.finalGrams, 270, "100g de pâtes crues donnent 270g de pâtes cuites.");
+
+const riceYield = convertCookingState(280, "riz_cru", "raw");
+assert.strictEqual(riceYield.finalGrams, 100, "280g de riz cuit rabaissent à 100g de riz cru.");
+
+const genericYield = convertCookingState(150, "pomme", "cooked");
+assert.strictEqual(genericYield.finalGrams, 150, "Un aliment sans facteur n'est pas modifié.");
+console.log("✅ 30. Cooking Yield: Équivalences cru/cuit pour pâtes, riz et viandes validées.");
+
+// Test 31: Recipe Draft Validation Zod
+const parsedDraft = validateAndCleanRecipeDraft({
+  name: "Porridge Express",
+  ingredients: [
+    { rawText: "60g flocons d'avoine", foodName: "Flocons d'avoine", quantity: 60, unit: "g", grams: 60, confidence: 95, assumptions: "Poids direct" }
+  ],
+  missingMatches: ["sel de guerande"],
+  questionsForUser: [],
+  requiresValidation: true
+});
+assert.strictEqual(parsedDraft.name, "Porridge Express", "Nom extrait doit être Porridge Express");
+assert.strictEqual(parsedDraft.ingredients[0].grams, 60, "Flocons d'avoine doit avoir un poids de 60g");
+assert.deepStrictEqual(parsedDraft.missingMatches, ["sel de guerande"], "Doit conserver les ingrédients manquant de correspondance");
+console.log("✅ 31. Recipe Draft: Brouillon validé et structuré avec Zod.");
+
+// Test 32: Food Candidates Matching
+const candidates = matchFoodCandidates("poulet blanc");
+assert.ok(candidates.length > 0, "Doit renvoyer au moins un aliment candidat pour 'poulet blanc'.");
+assert.strictEqual(candidates[0].foodId, "poulet_blanc", "Le premier candidat doit être blanc de poulet.");
+assert.ok(candidates[0].score >= 70, "La pertinence de blanc de poulet doit être élevée.");
+
+const wordMatchScore = calculateMatchScore("riz", "Riz blanc cru");
+assert.ok(wordMatchScore >= 50, "Le terme riz doit matcher avec Riz blanc cru.");
+console.log("✅ 32. Ingredient Matching: Fuzzy-matching et pertinence des candidats d'ingrédients validés.");
+
+// Test 33: Meal Photo Draft Validation
+const parsedPhotoDraft = validateAndCleanMealPhotoDraft({
+  detectedFoods: [
+    { label: "blanc de poulet grillé", probableFoodIds: ["poulet_blanc"], visualConfidence: 85, estimatedQuantityLabel: "150g", quantityConfidence: 80, rawCookedGuess: "cooked", needsUserConfirmation: true, uncertaintyNotes: [] }
+  ],
+  globalUncertainties: ["matière grasse de cuisson non identifiable"],
+  suggestedQuestions: ["S'agit-il d'un filet de poulet à l'huile d'olive ?"],
+  modelVersion: "gemini-3.5-flash",
+  promptVersion: "1.1"
+});
+assert.strictEqual(parsedPhotoDraft.detectedFoods[0].label, "blanc de poulet grillé", "Doit valider le label correctement");
+assert.strictEqual(parsedPhotoDraft.detectedFoods[0].estimatedQuantityLabel, "150g", "Doit valider le label de la quantité estimée");
+console.log("✅ 33. Meal Photo Draft: Validation de conformité du schéma de vision (Etape 6.1).");
+
+// Test 34: OCR Label Draft Validation
+const parsedOcrDraft = validateAndCleanOcrDraft({
+  productName: "Skyr Nature",
+  servingSize: "140g",
+  valuesPer100g: [
+    { nutrientId: "calories", value: 57, unit: "kcal", confidence: 95, rawText: "Énergie : 57 kcal" },
+    { nutrientId: "protein", value: 10, unit: "g", confidence: 95, rawText: "Protéines : 10 g" }
+  ],
+  uncertainFields: [],
+  requiresUserValidation: true
+});
+assert.strictEqual(parsedOcrDraft.productName, "Skyr Nature", "Doit valider le nom de produit extrait");
+assert.strictEqual(parsedOcrDraft.valuesPer100g[1].value, 10, "Doit valider la protéine extraite (10g pour 100g)");
+assert.strictEqual(parsedOcrDraft.valuesPer100g[0].value, 57, "Doit valider la calorie extraite (57 kcal pour 100g)");
+console.log("✅ 34. OCR Label Draft: Validation du schéma d'extraction OCR de l'étiquette (Etape 6.2).");
+
 console.log("====================================================");
-console.log("        TOUS LES TESTS (28/28) SE SONT DEROULES      ");
+console.log("        TOUS LES TESTS (34/34) SE SONT DEROULES      ");
 console.log("               AVEC SUCCES EN SANS FAILLE !         ");
 console.log("====================================================");

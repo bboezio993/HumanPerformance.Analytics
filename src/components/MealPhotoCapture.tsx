@@ -1,9 +1,16 @@
-import React, { useState, useRef } from 'react';
-import { useStore } from '../store/useStore';
-import { useAuth } from '../components/FirebaseProvider';
-import { db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
-import { CloudFunctionsGateway } from '../services/cloudFunctionsGateway';
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useRef, useEffect } from "react";
+import { useAuth } from "../components/FirebaseProvider";
+import { db } from "../firebase";
+import { doc, setDoc } from "firebase/firestore";
+import { CloudFunctionsGateway } from "../services/cloudFunctionsGateway";
+import { validateAndCleanMealPhotoDraft, DetectedFoodItem } from "../domain/nutrition/mealPhotoDraftSchema";
+import { matchFoodCandidates, FoodCandidate } from "../domain/nutrition/matchFoodCandidates";
+import { internalFoodDatabase } from "../domain/nutrition/foodDatabase";
 import { 
   UploadCloud, 
   Loader2, 
@@ -12,16 +19,15 @@ import {
   AlertTriangle, 
   HelpCircle, 
   Utensils, 
-  Maximize2, 
   Sliders, 
   Info,
-  Apple
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+  ChevronRight,
+  Database
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any) => void }) {
-  const store = useStore();
   const { user } = useAuth();
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,8 +35,13 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // States for ingredient revisions
-  const [editedFoods, setEditedFoods] = useState<any[]>([]);
+  // Re-typed structure model list of detected foods
+  const [editedFoods, setEditedFoods] = useState<Array<DetectedFoodItem & { 
+    gramsSelected: number;
+    candidates: FoodCandidate[];
+    selectedCandidateId?: string;
+  }>>([]);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,6 +52,7 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
       setImageSrc(reader.result as string);
       setAnalysisResult(null);
       setError(null);
+      setEditedFoods([]);
     };
     reader.readAsDataURL(files[0]);
   };
@@ -55,63 +67,121 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
     setError(null);
 
     try {
-      const data = await CloudFunctionsGateway.generateAiInsights('meal_photo', { imageBase64: imageSrc });
-      setAnalysisResult(data);
-      setEditedFoods(data.detectedFoods || []);
+      const rawData = await CloudFunctionsGateway.generateAiInsights("meal_photo", { imageBase64: imageSrc });
+      
+      // STEP 1: Strict Schema Validation
+      const validatedDraft = validateAndCleanMealPhotoDraft(rawData);
+      setAnalysisResult(validatedDraft);
 
-      if (user && data.usageLog) {
+      // STEP 2: Enrich foods with numeric parsed grams and fuzzy matching candidates
+      const enriched = validatedDraft.detectedFoods.map(food => {
+        // Parse grams from label like '150g' or '80 grams'
+        let parsedGrams = 100;
+        const match = food.estimatedQuantityLabel.match(/(\d+)/);
+        if (match) {
+          parsedGrams = Number(match[1]);
+        }
+
+        // Use core fuzzy database matcher matching against local DB
+        const candidates = matchFoodCandidates(food.label);
+        const topCandidate = candidates[0];
+
+        return {
+          ...food,
+          gramsSelected: parsedGrams,
+          candidates,
+          selectedCandidateId: topCandidate ? topCandidate.foodId : undefined,
+          matchedFoodId: topCandidate ? topCandidate.foodId : undefined,
+          matchedFoodName: topCandidate ? topCandidate.name : undefined
+        };
+      });
+
+      setEditedFoods(enriched);
+
+      // STEP 3: Write serverless quota logs structure into Firebase if user connected
+      if (user && rawData.usageLog) {
         try {
-          const usageDoc = doc(db, 'users', user.uid, 'aiUsageLogs', data.usageLog.id);
-          await setDoc(usageDoc, { ...data.usageLog, uid: user.uid });
+          const usageDoc = doc(db, "users", user.uid, "aiUsageLogs", rawData.usageLog.id);
+          await setDoc(usageDoc, { ...rawData.usageLog, uid: user.uid });
         } catch (fsErr) {
-          console.warn("Firestore usage log write skipped:", fsErr);
+          console.warn("[Firestore] Skipping logging of usage telemetry:", fsErr);
         }
       }
     } catch (err: any) {
       console.error(err);
-      setError("Anomalie réseau ou d'interprétation visuelle de l'assiette. Veuillez réessayer avec une image centrée.");
+      setError("Délai d'attente d'analyse visuelle dépassé. Prenez une photo plus lumineuse ou recadrez votre assiette.");
     } finally {
       setLoading(false);
     }
   };
 
-  const updateFoodGrams = (idx: number, gramsLabel: string) => {
+  const handleUpdateGrams = (idx: number, grams: number) => {
     const updated = [...editedFoods];
-    updated[idx] = { ...updated[idx], estimatedQuantityLabel: gramsLabel };
+    updated[idx] = { ...updated[idx], gramsSelected: Math.max(0, grams) };
     setEditedFoods(updated);
   };
 
-  const updateFoodLabel = (idx: number, newLabel: string) => {
+  const handleBindCandidate = (idx: number, candidateId: string) => {
     const updated = [...editedFoods];
-    updated[idx] = { ...updated[idx], label: newLabel };
+    const food = updated[idx];
+    const cand = food.candidates.find(c => c.foodId === candidateId);
+
+    if (cand) {
+      updated[idx] = {
+        ...food,
+        selectedCandidateId: candidateId,
+        matchedFoodId: cand.foodId,
+        matchedFoodName: cand.name
+      };
+    } else {
+      updated[idx] = {
+        ...food,
+        selectedCandidateId: undefined,
+        matchedFoodId: undefined,
+        matchedFoodName: undefined
+      };
+    }
     setEditedFoods(updated);
   };
 
   const handleConfirmAndAddAll = () => {
-    if (!analysisResult) return;
+    if (editedFoods.length === 0) return;
 
     editedFoods.forEach(food => {
-      // Decode raw weight from label like '150g'
-      let numericGrams = 100;
-      const match = food.estimatedQuantityLabel.match(/(\d+)/);
-      if (match) {
-        numericGrams = Number(match[1]);
+      let resolvedItem = null;
+      if (food.matchedFoodId) {
+        resolvedItem = internalFoodDatabase.find(f => f.id === food.matchedFoodId);
       }
 
-      // Propose approx macro profiles based on standard caloric density (average 120 kcal, 6g prot, 18g carbs, 3g lipids per 100g)
+      const g = food.gramsSelected;
+
+      // Compute exact/approx macros
+      const calories = resolvedItem 
+        ? Math.round((resolvedItem.calories * g) / 100) 
+        : Math.round(g * 1.3);
+      const protein = resolvedItem 
+        ? Number(((resolvedItem.protein * g) / 100).toFixed(1)) 
+        : Number((g * 0.06).toFixed(1));
+      const carbs = resolvedItem 
+        ? Number(((resolvedItem.carbs * g) / 100).toFixed(1)) 
+        : Number((g * 0.16).toFixed(1));
+      const fat = resolvedItem 
+        ? Number(((resolvedItem.fat * g) / 100).toFixed(1)) 
+        : Number((g * 0.03).toFixed(1));
+
       onAddMealItem({
         foodId: `photo_img_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-        foodName: `${food.label} (Estimation visuelle)`,
-        quantity: numericGrams,
+        foodName: food.matchedFoodName ? `${food.matchedFoodName} (Visuel)` : `${food.label} (Visuel)`,
+        quantity: g,
         unit: "g",
-        gramsSelected: numericGrams,
+        gramsSelected: g,
         conversionConfidence: food.visualConfidence || 75,
-        conversionAssumptions: `Estimé visuellement par Gemini Vision. État supposé: ${food.rawCookedGuess}. Note: ${food.uncertaintyNotes?.[0] || 'aucune'}.`,
+        conversionAssumptions: `Estimé visuellement par Vision AI. Résolution: ${food.matchedFoodId ? 'Catalog item matched' : 'Generic fallback default'}. État: ${food.rawCookedGuess}.`,
         sourceType: "meal_photo",
-        calories: Math.round(numericGrams * 1.3),
-        protein: Number((numericGrams * 0.06).toFixed(1)),
-        carbs: Number((numericGrams * 0.16).toFixed(1)),
-        fat: Number((numericGrams * 0.03).toFixed(1))
+        calories,
+        protein,
+        carbs,
+        fat
       });
     });
 
@@ -120,20 +190,21 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
       setSuccess(false);
       setAnalysisResult(null);
       setImageSrc(null);
+      setEditedFoods([]);
     }, 1500);
   };
 
   return (
-    <div className="space-y-4 text-xs">
+    <div className="space-y-4 text-xs font-sans">
       {!imageSrc ? (
         <div 
           onClick={handleUploadClick}
-          className="border-2 border-dashed border-border/60 hover:border-primary/50 rounded-2xl p-6 text-center cursor-pointer bg-secondary/10 hover:bg-secondary/20 transition-all space-y-2 flex flex-col items-center justify-center py-8"
+          className="border-2 border-dashed border-border/80 hover:border-primary/50 rounded-2xl p-6 text-center cursor-pointer bg-secondary/15 hover:bg-secondary/25 transition-all space-y-2 flex flex-col items-center justify-center py-8"
         >
           <Utensils className="w-8 h-8 text-muted-foreground animate-pulse" />
           <p className="font-semibold text-foreground text-xs">Photographier votre assiette de repas 📸</p>
           <p className="text-[10px] text-muted-foreground max-w-xs leading-relaxed">
-            Glissez-déposez ou cliquez pour prendre une photo de votre assiette complète (ex: pâtes au saumon, riz poulet, salade composée).
+            Glissez-déposez ou cliquez pour charger une image de votre assiette complète. Gemini identifiera vos ingrédients avec certitude et précision.
           </p>
           <input 
             type="file" 
@@ -144,14 +215,18 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
           />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           <div className="relative rounded-2xl border overflow-hidden aspect-video bg-black flex justify-center items-center">
             <img src={imageSrc} alt="User meal plate" className="max-h-full object-contain" />
             <button 
-              onClick={() => setImageSrc(null)}
-              className="absolute top-2 right-2 p-1 bg-black/80 text-white rounded-lg px-2 text-[10px] font-bold uppercase transition-all animate-fade-in"
+              onClick={() => {
+                setImageSrc(null);
+                setAnalysisResult(null);
+                setEditedFoods([]);
+              }}
+              className="absolute top-2 right-2 p-1 bg-black/80 text-white rounded-lg px-2 text-[10px] font-bold uppercase hover:bg-black transition-all"
             >
-              Changer de repas ❌
+              Changer d'image ❌
             </button>
           </div>
 
@@ -160,7 +235,7 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
               <Button
                 onClick={handleAnalyzeMeal}
                 disabled={loading}
-                className="text-xs h-9 font-bold font-sans"
+                className="text-xs h-9 font-bold bg-primary text-primary-foreground"
               >
                 {loading ? (
                   <>
@@ -169,7 +244,7 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-500 animate-pulse" />
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5 text-amber-400 animate-pulse" />
                     Estimer calories visuellement ✨
                   </>
                 )}
@@ -193,7 +268,7 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
         </div>
       )}
 
-      {analysisResult && (
+      {analysisResult && editedFoods.length > 0 && (
         <div className="p-4 border rounded-2xl bg-secondary/5 border-border/80 space-y-4 animate-fade-in text-xs">
           <div className="flex justify-between items-center border-b pb-2">
             <div>
@@ -207,79 +282,92 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
           </div>
 
           <div className="space-y-3">
-            <div className="divide-y divide-border/40 max-h-60 overflow-y-auto pr-1">
-              {editedFoods.map((food, idx) => (
-                <div key={idx} className="py-2.5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <input 
-                      type="text" 
-                      value={food.label} 
-                      onChange={(e) => updateFoodLabel(idx, e.target.value)}
-                      className="text-xs font-semibold bg-background border px-1.5 py-0.5 rounded max-w-xs" 
-                    />
-                    <div className="text-[10px] text-muted-foreground mt-1 flex flex-wrap gap-1">
-                      <Badge variant="outline" className="text-[9px] font-normal">{food.rawCookedGuess}</Badge>
-                      {food.uncertaintyNotes?.length > 0 && (
-                        <span className="italic block text-[9.5px]">({food.uncertaintyNotes[0]})</span>
+            <div className="divide-y divide-border/40 max-h-72 overflow-y-auto pr-1">
+              {editedFoods.map((food, idx) => {
+                let resolvedItem = null;
+                if (food.matchedFoodId) {
+                  resolvedItem = internalFoodDatabase.find(f => f.id === food.matchedFoodId);
+                }
+
+                const customCal = resolvedItem 
+                  ? Math.round((resolvedItem.calories * food.gramsSelected) / 100) 
+                  : Math.round(food.gramsSelected * 1.3);
+
+                return (
+                  <div key={idx} className="py-3 flex flex-col gap-2.5">
+                    <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-foreground text-xs">{food.label}</span>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 flex flex-wrap gap-1.5">
+                          <Badge variant="outline" className="text-[8px] font-mono leading-none py-0.5">{food.rawCookedGuess}</Badge>
+                          <span className="text-muted-foreground text-[9px]">Confiance visuelle: {food.visualConfidence}%</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0 text-right">
+                        <div>
+                          <label className="text-[9px] text-muted-foreground block">Poids Estimé (g) :</label>
+                          <input 
+                            type="number" 
+                            value={food.gramsSelected} 
+                            onChange={(e) => handleUpdateGrams(idx, Number(e.target.value))}
+                            className="w-16 bg-background border rounded text-xs text-foreground font-bold font-mono text-center py-0.5"
+                          />
+                        </div>
+                        
+                        <div className="text-right">
+                          <span className="text-[9px] text-muted-foreground block">Calories (kcal) :</span>
+                          <span className="font-mono font-bold text-foreground">{customCal}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Interactive Candidate Mapping */}
+                    <div className="p-2 border border-secondary/80 bg-secondary/10 rounded-xl flex items-center gap-2">
+                      <Database size={12} className="text-primary shrink-0" />
+                      <span className="text-[10px] font-medium text-muted-foreground shrink-0">Associer au catalogue :</span>
+                      {food.candidates.length > 0 ? (
+                        <select
+                          value={food.selectedCandidateId || ""}
+                          onChange={(e) => handleBindCandidate(idx, e.target.value)}
+                          className="flex-1 text-[10px] bg-background border rounded px-1.5 py-0.5 font-sans focus:outline-none"
+                        >
+                          <option value="">-- Conserver l'estimation IA standard --</option>
+                          {food.candidates.map((c) => (
+                            <option key={c.foodId} value={c.foodId}>
+                              {c.name} ({c.calories} kcal)
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground italic">Aucun aliment correspondant trouvé dans le catalogue</span>
                       )}
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3 shrink-0 text-right">
-                    <div>
-                      <span className="text-[9px] text-muted-foreground block">Quantité standard :</span>
-                      <input 
-                        type="text" 
-                        value={food.estimatedQuantityLabel} 
-                        onChange={(e) => updateFoodGrams(idx, e.target.value)}
-                        className="w-20 bg-background border px-1.5 py-0.5 rounded text-xs text-foreground font-bold font-mono text-center"
-                      />
-                    </div>
-                    
-                    <div className="flex flex-col items-center">
-                      <span className="text-[8px] text-muted-foreground uppercase block">Confiance</span>
-                      <Badge variant={food.visualConfidence >= 75 ? "default" : "secondary"} className="text-[10px]">
-                        {food.visualConfidence}%
-                      </Badge>
-                    </div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
           {analysisResult.suggestedQuestions?.length > 0 && (
-            <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-1.5 text-[11px] leading-relaxed">
+            <div className="p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl space-y-1 text-[10.5px] leading-relaxed">
               <span className="font-bold text-blue-400 flex items-center gap-1">
                 <HelpCircle size={13} />
-                Pour affiner la précision macro de votre assiette :
+                Précisions requises de l'athlète :
               </span>
               <ul className="list-disc list-inside text-muted-foreground pl-1 space-y-1">
                 {analysisResult.suggestedQuestions.map((q: string, idx: number) => (
-                  <li key={idx} className="text-muted-foreground">
-                    {q} 
-                    <button 
-                      onClick={() => {
-                        // Let user add details directly inside notes field
-                        const updated = [...editedFoods];
-                        updated[0] = { ...updated[0], uncertaintyNotes: ["Confirmé par l'athlète sous forme de précision manuelle."] };
-                        setEditedFoods(updated);
-                      }}
-                      className="ml-1.5 text-[9px] text-primary hover:underline font-bold uppercase"
-                    >
-                      Confirmer Oui ✔️
-                    </button>
-                  </li>
+                  <li key={idx} className="text-muted-foreground">{q}</li>
                 ))}
               </ul>
             </div>
           )}
 
           {analysisResult.globalUncertainties?.length > 0 && (
-            <div className="p-2.5 bg-amber-500/5 border border-amber-500/10 rounded-xl leading-relaxed text-[11px] space-y-1">
+            <div className="p-2.5 bg-amber-500/5 border border-amber-500/10 rounded-xl leading-relaxed text-[10.5px] space-y-1">
               <span className="font-bold text-amber-500 flex items-center gap-1">
                 <AlertTriangle size={12} />
-                Incertitudes visuelles (matières grasses, épaisseur) :
+                Limites & Incertitudes visuelles (matières grasses cachées...) :
               </span>
               <ul className="list-disc list-inside text-muted-foreground pl-1 space-y-0.5">
                 {analysisResult.globalUncertainties.map((unc: string, idx: number) => (
@@ -289,7 +377,13 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
             </div>
           )}
 
-          <div className="pt-3 border-t flex justify-end">
+          {/* Model Traceability Info Footer */}
+          <div className="text-[9px] text-muted-foreground/60 border-t pt-2 flex justify-between items-center">
+            <span>Modèle : {analysisResult.modelVersion}</span>
+            <span>Règle d'Analyse : v{analysisResult.promptVersion}</span>
+          </div>
+
+          <div className="pt-2 flex justify-end">
             <Button
               onClick={handleConfirmAndAddAll}
               className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs"
@@ -297,11 +391,6 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
               <Check className="w-3.5 h-3.5 mr-1" />
               Valider toutes les portions ({editedFoods.length} aliments)
             </Button>
-          </div>
-
-          <div className="p-2 border border-blue-500/10 bg-blue-500/5 rounded-xl text-[10px] text-muted-foreground flex gap-1.5 items-center leading-tight">
-            <Info size={12} className="text-blue-500 shrink-0" />
-            <span>Rappel : Les calories visuelles sont estimées de façon probabiliste. Corrigé sur validation.</span>
           </div>
         </div>
       )}

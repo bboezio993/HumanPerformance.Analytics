@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { auth } from '../../firebase';
-import { internalFoodDatabase, servingUnits, convertPortionToGrams, internalRecipes } from '../../domain/nutrition/foodDatabase';
+import { internalFoodDatabase, servingUnits, internalRecipes } from '../../domain/nutrition/foodDatabase';
+import { convertPortionToGrams } from '../../domain/nutrition/portionConversion';
+import { convertCookingState } from '../../domain/nutrition/cookingYield';
 import { resolveRecipeToMealItem } from '../../domain/nutrition/recipeEngine';
 import { foodNutrientDatabase } from '../../domain/nutrition/foodNutrientValues';
 import { CoreNutrients } from '../../domain/nutrition/nutrientDefinitions';
@@ -101,6 +103,7 @@ export function NutritionLogger() {
   };
 
   const [mealType, setMealType] = useState<MealLog['mealType']>('breakfast');
+  const [mealDate, setMealDate] = useState(new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
   const [selectedFoodId, setSelectedFoodId] = useState('');
   const [quantity, setQuantity] = useState(100);
@@ -284,9 +287,18 @@ export function NutritionLogger() {
     if (!selectedFood) return;
 
     // Convert portion to grams
-    const { grams, confidence, assumptions } = convertPortionToGrams(selectedFood.id, quantity, unit);
+    let { grams, confidence, assumptions } = convertPortionToGrams(selectedFood.id, quantity, unit);
 
-    // Calculate nutritional breakdown per 100g base
+    // Apply cooking yield factor if applicable (only in grams and when state differs)
+    let finalGramsSelected = grams;
+    if (unit === "g" && selectedFood.rawCookedState && selectedFood.rawCookedState !== mealItemRawCooked) {
+      const conversionRef = convertCookingState(grams, selectedFood.id, mealItemRawCooked);
+      finalGramsSelected = conversionRef.finalGrams;
+      confidence = Math.min(confidence, conversionRef.confidence);
+      assumptions.push(`Modification cuisson [${selectedFood.rawCookedState} -> ${mealItemRawCooked}] : ${conversionRef.note}`);
+    }
+
+    // Calculate nutritional breakdown per 100g base of original DB food item state
     const factor = grams / 100;
     const calories = Math.round(selectedFood.calories * factor);
     const protein = Number((selectedFood.protein * factor).toFixed(1));
@@ -298,7 +310,7 @@ export function NutritionLogger() {
       foodName: selectedFood.name,
       quantity,
       unit,
-      gramsSelected: grams,
+      gramsSelected: finalGramsSelected,
       rawCookedState: unit === 'g' ? mealItemRawCooked : undefined,
       conversionConfidence: confidence,
       conversionAssumptions: assumptions.join('; '),
@@ -321,7 +333,7 @@ export function NutritionLogger() {
 
     const newLog: MealLog = {
       id: `meal_${Date.now()}`,
-      date: new Date().toISOString().split('T')[0],
+      date: mealDate,
       mealType,
       items: items.map(it => ({
         foodId: it.foodId,
@@ -1097,11 +1109,40 @@ export function NutritionLogger() {
 
         {/* Current Composing Meal summary */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h5 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Composition actuelle</h5>
-            <Badge variant="outline" className="font-bold text-[10px] bg-emerald-500/10 text-emerald-500">
-              {mealType.toUpperCase()}
-            </Badge>
+          <div className="p-3.5 bg-secondary/15 border border-border/85 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h5 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Paramètres du Repas</h5>
+              <Badge variant="outline" className="font-bold text-[9px] bg-emerald-500/15 text-emerald-500 font-mono">
+                {mealType.toUpperCase()}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="text-[9px] font-bold text-muted-foreground block mb-1">Date d'enregistrement :</label>
+                <input 
+                  type="date" 
+                  value={mealDate} 
+                  onChange={(e) => setMealDate(e.target.value)} 
+                  className="w-full text-xs bg-background border border-border rounded-lg p-1.5 font-sans focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="text-[9px] font-bold text-muted-foreground block mb-1">Type de repas :</label>
+                <select 
+                  value={mealType} 
+                  onChange={(e) => setMealType(e.target.value as MealLog['mealType'])}
+                  className="w-full text-xs bg-background border border-border rounded-lg p-1.5 focus:outline-none"
+                >
+                  <option value="breakfast">Petit-Déjeuner 🍳</option>
+                  <option value="lunch">Déjeuner 🥗</option>
+                  <option value="dinner">Dîner 🍲</option>
+                  <option value="snack">Collation 🍎</option>
+                  <option value="pre_workout">Pré-Workout ⚡</option>
+                  <option value="intra_workout">Intra-Workout 💧</option>
+                  <option value="post_workout">Post-Workout 🥛</option>
+                </select>
+              </div>
+            </div>
           </div>
 
           {items.length === 0 ? (

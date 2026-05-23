@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ProductReviewScreen } from '../features/nutrition/ProductReviewScreen';
 
 export function BarcodeScanner({ onAddMealItem }: { onAddMealItem: (item: any) => void }) {
   const store = useStore();
@@ -377,270 +378,68 @@ export function BarcodeScanner({ onAddMealItem }: { onAddMealItem: (item: any) =
       )}
 
       {product && (
-        <div className="p-4 border rounded-2xl bg-secondary/10 border-border/80 space-y-4 animate-fade-in text-xs">
-          <div className="flex gap-3">
-            {product.imageUrl && (
-              <img
-                src={product.imageUrl}
-                alt={product.productName}
-                referrerPolicy="no-referrer"
-                className="w-16 h-16 object-contain rounded-lg bg-white border shrink-0"
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="flex justify-between items-start gap-2">
-                <div>
-                  <h5 className="font-bold text-sm text-foreground truncate">{product.productName}</h5>
-                  <span className="text-[10px] text-muted-foreground block">{product.brand}</span>
-                </div>
-                <Badge variant="outline" className="text-[9px] font-mono shrink-0">
-                  Completeness: {product.sourceCompleteness}%
-                </Badge>
-              </div>
-              <div className="mt-2 flex gap-2">
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setIsEditing(!isEditing)}
-                  className="h-6 px-2 text-[9px] font-bold uppercase tracking-wider text-primary hover:bg-primary/5"
-                >
-                  {isEditing ? "Conserver corrections" : "Modifier valeurs / 100g ✏️"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleToggleFavorite}
-                  className={`h-6 px-2 text-[9px] font-bold uppercase ${isFavorite ? "text-red-500" : "text-muted-foreground hover:text-red-500"}`}
-                >
-                  <Heart size={10} className={`mr-1 ${isFavorite ? "fill-current" : ""}`} />
-                  {isFavorite ? "Favori !" : "Favorisé"}
-                </Button>
-              </div>
-            </div>
-          </div>
+        <ProductReviewScreen
+          product={product}
+          isFavorite={isFavorite}
+          onToggleFavorite={handleToggleFavorite}
+          onCancel={() => {
+            setProduct(null);
+            setBarcode('');
+          }}
+          onConfirm={(correctedProduct, portionGrams, selectedMealType, selectedRawCooked) => {
+            const isCorrected = 
+              correctedProduct.productName !== product.productName ||
+              correctedProduct.brand !== product.brand ||
+              correctedProduct.nutrimentsPer100g.calories.value !== product.nutrimentsPer100g.calories.value ||
+              correctedProduct.nutrimentsPer100g.protein.value !== product.nutrimentsPer100g.protein.value ||
+              correctedProduct.nutrimentsPer100g.carbs.value !== product.nutrimentsPer100g.carbs.value ||
+              correctedProduct.nutrimentsPer100g.fat.value !== product.nutrimentsPer100g.fat.value;
 
-          {/* Favorite Cloud configuration form */}
-          {showFavConfig && (
-            <div className="p-3 bg-red-500/5 rounded-xl border border-red-500/10 space-y-3">
-              <div className="flex justify-between items-center pb-1 border-b border-red-500/10">
-                <h6 className="font-bold text-[10px] uppercase text-red-500 flex items-center gap-1">
-                  <Heart size={12} className="fill-current text-red-500" />
-                  Configuration du favori Cloud
-                </h6>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowFavConfig(false)}
-                  className="h-5 px-1.5 text-[8px] font-bold text-muted-foreground hover:bg-transparent"
-                >
-                  Masquer
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">Portion habituelle :</label>
-                  <input
-                    type="number"
-                    value={favPortion}
-                    onChange={(e) => setFavPortion(Number(e.target.value))}
-                    className="w-full text-xs rounded border border-border bg-background p-1 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">Repas habituel :</label>
-                  <select
-                    value={favMealType}
-                    onChange={(e) => setFavMealType(e.target.value)}
-                    className="w-full text-xs rounded border border-border bg-background p-1"
-                  >
-                    <option value="Petit déjeuner">Petit déjeuner</option>
-                    <option value="Déjeuner">Déjeuner</option>
-                    <option value="Dîner">Dîner</option>
-                    <option value="En-cas">En-cas</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground block mb-0.5">Notes / Instructions :</label>
-                <textarea
-                  value={favNotes}
-                  onChange={(e) => setFavNotes(e.target.value)}
-                  placeholder="Ex: 3 biscuits par portion, excellente digestibilité pré-effort..."
-                  className="w-full text-xs rounded border border-border bg-background p-1 h-12 resize-none"
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    if (!product) return;
-                    const favoriteObj = {
-                      id: `${product.id}_fav`,
-                      uid: auth.currentUser?.uid || "Athlète Elite",
-                      foodProductId: product.id,
-                      displayName: product.productName,
-                      brand: product.brand,
-                      defaultPortion: favPortion,
-                      defaultMealType: favMealType,
-                      userNotes: favNotes,
-                      createdAt: new Date().toISOString()
-                    };
-                    store.addFavoriteFood(favoriteObj);
-                    setShowFavConfig(false);
-                  }}
-                  className="bg-red-500 hover:bg-red-600 text-white font-bold h-7 px-3 text-[10px] rounded-md"
-                >
-                  Sauvegarder favori Cloud
-                </Button>
-              </div>
-            </div>
-          )}
+            if (isCorrected && store.isMigratedToCloud) {
+              RepositoryProvider.getRepository().saveFoodProduct(correctedProduct).catch(() => {});
+            }
 
-          {/* Form modifications inside */}
-          {isEditing ? (
-            <div className="p-3 bg-secondary/30 rounded-xl border border-border/40 space-y-3">
-              <h6 className="font-bold text-[10px] uppercase text-muted-foreground">Corriger l'aliment (/100g)</h6>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground">Nom :</label>
-                  <input type="text" value={editedName} onChange={e => setEditedName(e.target.value)} className="w-full bg-background border p-1 rounded font-sans text-xs" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground">Marque :</label>
-                  <input type="text" value={editedBrand} onChange={e => setEditedBrand(e.target.value)} className="w-full bg-background border p-1 rounded font-sans text-xs" />
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-2 text-center">
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground">Cal (kcal)</label>
-                  <input type="number" value={editedCalories} onChange={e => setEditedCalories(Number(e.target.value))} className="w-full bg-background border p-1 rounded font-mono text-center text-xs" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground">Prot (g)</label>
-                  <input type="number" step="0.1" value={editedProtein} onChange={e => setEditedProtein(Number(e.target.value))} className="w-full bg-background border p-1 rounded font-mono text-center text-xs" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground">Glu (g)</label>
-                  <input type="number" step="0.1" value={editedCarbs} onChange={e => setEditedCarbs(Number(e.target.value))} className="w-full bg-background border p-1 rounded font-mono text-center text-xs" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-bold text-muted-foreground">Lip (g)</label>
-                  <input type="number" step="0.1" value={editedFat} onChange={e => setEditedFat(Number(e.target.value))} className="w-full bg-background border p-1 rounded font-mono text-center text-xs" />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="p-3 bg-secondary/20 rounded-xl border border-secondary border-t-2 border-t-emerald-500 flex justify-between items-center text-center">
-              <div>
-                <span className="text-[8px] block uppercase text-muted-foreground font-semibold">Calories (100g)</span>
-                <span className="font-mono font-bold text-xs text-emerald-500">
-                  {product.nutrimentsPer100g.calories?.value !== null && product.nutrimentsPer100g.calories?.value !== undefined
-                    ? `${product.nutrimentsPer100g.calories.value} kcal`
-                    : "Donnée non disponible"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[8px] block uppercase text-muted-foreground font-semibold">Protéines</span>
-                <span className="font-mono font-bold text-xs text-indigo-400">
-                  {product.nutrimentsPer100g.protein?.value !== null && product.nutrimentsPer100g.protein?.value !== undefined
-                    ? `${product.nutrimentsPer100g.protein.value}g`
-                    : "Donnée non disponible"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[8px] block uppercase text-muted-foreground font-semibold">Glucides</span>
-                <span className="font-mono font-bold text-xs text-amber-500">
-                  {product.nutrimentsPer100g.carbs?.value !== null && product.nutrimentsPer100g.carbs?.value !== undefined
-                    ? `${product.nutrimentsPer100g.carbs.value}g`
-                    : "Donnée non disponible"}
-                </span>
-              </div>
-              <div>
-                <span className="text-[8px] block uppercase text-muted-foreground font-semibold">Lipides</span>
-                <span className="font-mono font-bold text-xs text-rose-400">
-                  {product.nutrimentsPer100g.fat?.value !== null && product.nutrimentsPer100g.fat?.value !== undefined
-                    ? `${product.nutrimentsPer100g.fat.value}g`
-                    : "Donnée non disponible"}
-                </span>
-              </div>
-            </div>
-          )}
+            const gramsSelected = portionGrams;
+            const rawCalVal = correctedProduct.nutrimentsPer100g.calories.value;
+            const finalCals = (rawCalVal !== undefined && rawCalVal !== null) 
+              ? Math.round((Number(rawCalVal) * gramsSelected) / 100) 
+              : null;
 
-          {/* Portion and Selection values */}
-          <div className="pt-3 border-t border-border/60">
-            <h6 className="font-bold text-[10px] uppercase text-muted-foreground mb-3 flex items-center gap-1">
-              <Sliders size={12} className="text-primary" />
-              Configuration de la portion consommée
-            </h6>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground block mb-1">Unité :</label>
-                <select 
-                  value={unit} 
-                  onChange={(e) => setUnit(e.target.value)}
-                  className="w-full text-xs rounded-lg border border-border bg-background p-2 focus:ring-1 focus:outline-none"
-                >
-                  <option value="g">Grammes (g)</option>
-                  <option value="piece">Unité / Pièce moyenne (~50g)</option>
-                </select>
-              </div>
+            const rawProteinVal = correctedProduct.nutrimentsPer100g.protein.value;
+            const finalProtein = (rawProteinVal !== undefined && rawProteinVal !== null) 
+              ? Number(((Number(rawProteinVal) * gramsSelected) / 100).toFixed(1)) 
+              : null;
 
-              <div>
-                <label className="text-[9px] font-bold text-muted-foreground block mb-1">Quantité :</label>
-                <input
-                  type="number"
-                  value={quantity}
-                  onChange={(e) => setQuantity(Number(e.target.value))}
-                  className="w-full text-xs rounded-lg border border-border bg-background p-2 font-mono"
-                />
-              </div>
-            </div>
+            const rawCarbsVal = correctedProduct.nutrimentsPer100g.carbs.value;
+            const finalCarbs = (rawCarbsVal !== undefined && rawCarbsVal !== null) 
+              ? Number(((Number(rawCarbsVal) * gramsSelected) / 100).toFixed(1)) 
+              : null;
 
-            {unit === 'g' && (
-              <div className="pt-2">
-                <label className="text-[9px] font-bold text-muted-foreground block mb-1">État de cuisson :</label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <input type="radio" value="raw" checked={rawCooked === 'raw'} onChange={() => setRawCooked('raw')} className="accent-emerald-500" />
-                    Cru
-                  </label>
-                  <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <input type="radio" value="cooked" checked={rawCooked === 'cooked'} onChange={() => setRawCooked('cooked')} className="accent-emerald-500" />
-                    Cuit
-                  </label>
-                </div>
-              </div>
-            )}
-          </div>
+            const rawFatVal = correctedProduct.nutrimentsPer100g.fat.value;
+            const finalFat = (rawFatVal !== undefined && rawFatVal !== null) 
+              ? Number(((Number(rawFatVal) * gramsSelected) / 100).toFixed(1)) 
+              : null;
 
-          <div className="pt-3 border-t border-border/60 flex items-center justify-between">
-            <div className="font-mono leading-tight">
-              <span className="text-[9px] uppercase text-muted-foreground block">Apports estimés pour {quantity} {unit} :</span>
-              <span className="font-bold text-xs text-emerald-500">
-                {finalCals !== null ? `${finalCals} kcal` : "Donnée non disponible"}
-              </span>
-              <span className="text-[10px] text-muted-foreground block">
-                Pro : {finalProtein !== null ? `${finalProtein}g` : "Donnée non disponible"} • 
-                Glu : {finalCarbs !== null ? `${finalCarbs}g` : "Donnée non disponible"} • 
-                Lip : {finalFat !== null ? `${finalFat}g` : "Donnée non disponible"}
-              </span>
-            </div>
-            
-            <Button
-              onClick={handleAddProduct}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-9 px-4 rounded-lg text-xs"
-            >
-              <Plus className="w-3.5 h-3.5 mr-1" />
-              Ajouter au repas
-            </Button>
-          </div>
+            onAddMealItem({
+              foodId: correctedProduct.id,
+              foodName: `${correctedProduct.productName} (${correctedProduct.brand})`,
+              quantity: portionGrams,
+              unit: 'g',
+              gramsSelected,
+              rawCookedState: selectedRawCooked,
+              conversionConfidence: correctedProduct.confidence || 90,
+              conversionAssumptions: `Directement issu d'Open Food Facts (${barcode}). Corrigé par l'utilisateur: ${isCorrected ? 'Oui' : 'Non'}.`,
+              sourceType: "open_food_facts",
+              calories: finalCals,
+              protein: finalProtein,
+              carbs: finalCarbs,
+              fat: finalFat
+            });
 
-          {/* Source completeness and quality warn */}
-          <div className="p-2 border border-blue-500/20 bg-blue-500/5 rounded-xl text-[10px] text-muted-foreground flex gap-1.5 items-center leading-tight">
-            <Info size={12} className="text-blue-500 shrink-0" />
-            <span>Données issues d’Open Food Facts - à vérifier si produit sensible.</span>
-          </div>
-        </div>
+            setProduct(null);
+            setBarcode('');
+          }}
+        />
       )}
     </div>
   );
