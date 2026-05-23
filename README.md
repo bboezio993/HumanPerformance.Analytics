@@ -38,27 +38,54 @@ Chaque donnée ingérée passe par un évaluateur de qualité (couche `assessDat
 Aucune information ne disparaît sans laisser de trace :
 Les valeurs détectées comme aberrantes ou dont les attributs ne matchent pas le registre strict de l'application (finalConfidence < 50) sont orientées vers une quarantaine systémique (`rejectedMetrics`). Ces données exclues restent vérifiables en vue d'audit (diagnostic des sources, anomalies des parsers ou saisies hasardeuses de l'utilisateur).
 
-## Données complexes, Architecture & Vie Privée
+## Architecture Cloud-First, Modèles IA de Saisie & Vie Privée
 
-Aura Elite suit une conception de stockage local prioritaire :
-- En version Web/Preview : les données subjectives, incluant les questionnaires de forme physiologiques, douleurs, repas et constantes féminines sont conservées localement dans `IndexedDB` en mode `local-only` pour une sécurité maximale durant les itérations.
-- Si le déploiement de **Firebase Firestore** est activé : la synchronisation nécessitera alors le renforcement de toutes les collections log avec des Règles de Sécurité fortes isolant strictement chaque profil.
+Aura Elite cible une architecture moderne **Cloud-First** couplée à des modèles d'assistance par IA (Gemini) strictes pour lever toute friction de saisie :
+- **Source de Vérité Cloud** : Dès que l'athlète crée un compte ou s'authentifie, **Firebase Firestore** devient l'unique source de vérité de ses logs de santé et sportifs. `IndexedDB` n'intervient plus que comme cache asynchrone hors-ligne et file d'attente réseau (offline-queue).
+- **Sécurité et Isolation (RGPD)** : Tous les documents de l'athlète sont sécurisés au sein de collections imbriquées de type `/users/{uid}/...` (notamment `/mealLogs`, `/metrics`, `/recipes`, `/pains`). L'isolation est étanche et régie par des Règles de Sécurité Firestore verrouillant les accès au seul propriétaire authentifié.
+- **Droit à l'Oubli et Purge** : L'athlète dispose d'une gouvernance explicite avec contrôle de suppression locale, suppression cloud globale pour suppression de compte, rétention limitée des photos et exports standardisés au format JSON portable.
 
-### Matrice de Stockage et Vie Privée
+### Assistances IA de Saisie Obligatoires (Moteur de Brouillon)
 
-| Catégorie de Donnée | Stockage Local | Cloud (Firestore) | Export (JSON) | Suppression locale | Suppression distante |
+Afin d'éviter toute saisie de données manuelles laborieuse, quatre flux d'IA sont intégrés de manière obligatoire. Chaque flux d'IA a un rôle strict d'accélérateur et génère un **Brouillon (Draft)** transitoire devant être audité et validé par l'athlète avant persistance définitive.
+
+1.  **Saisie Photo Repas (Gemini Vision)** : Upload asynchrone de la photo vers un bucket Cloud Storage sécurisé sous l'URI de l'athlète. Analyse via la Cloud Function `analyzeMealPhoto` renvoyant le schéma `MealPhotoDraft` (aliments probables, portions, incertitudes, questions sémantiques).
+2.  **OCR d'Étiquettes Nutritionnelles** : Capture photo ou téléversement d'un tableau de valeurs d'emballage vers Storage. Extraction asynchrone par `extractNutritionLabel` renvoyant un `NutritionLabelDraft` avec étalonnage par 100g, incertitudes de détection et aide à la vigilance sur les allergènes.
+3.  **Saisie Vocale (Transcription & Extraction)** : Enregistrement de 15 à 45 secondes d'expression libre. Transcription via l'API Web Speech, puis segmentation structurée par la Cloud Function `parseVoiceForm` renvoyant un `VoiceDraft`/`FormDraft` pré-remplissant instantanément le formulaire journalier actif (Daily check-in, RPE, etc.).
+4.  **Import de Recettes par Texte Libre** : Collage ou dictée d'une recette littéraire brute. Extraction structurée des ingrédients, portions théoriques et poids finaux par `parseRecipeText` renvoyant une `RecipeDraft`.
+
+### Matrice de Stockage et Vie Privée (Cible Beta)
+
+| Catégorie de Donnée | Stockage Local (Cache) | Cloud (Firestore) | Export (JSON) | Suppression locale | Suppression distante |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **Profil physique** | oui | disponible | oui | oui | à implémenter |
-| **Métriques Garmin** | oui | disponible | oui | oui | à implémenter |
-| **Activités & Entrainements** | oui | disponible | oui | oui | à implémenter |
-| **Nutrition (Meal Logs)**| oui | non V1 | oui | oui | n/a |
-| **Douleurs** | oui | non V1 | oui | oui | n/a |
-| **Humeur & Contexte** | oui | non V1 | oui | oui | n/a |
+| **Profil physique** | oui | oui (source de vérité) | oui | oui | oui |
+| **Métriques Garmin** | oui | oui (source de vérité) | oui | oui | oui |
+| **Activités & Entrainements** | oui | oui (source de vérité) | oui | oui | oui |
+| **Nutrition (Meal Logs & Recettes)**| oui | oui (source de vérité) | oui | oui | oui |
+| **Douleurs & Bien-être** | oui | oui (source de vérité) | oui | oui | oui |
+| **Enregistrements Vocaux & Photos**| oui (temporaire) | oui (Storage avec rétention) | oui | oui | oui |
 
-## Nutrition : Limites actuelles
+---
+
+## Intégrations Tiers & Garmin
+
+*   **Open Food Facts & Code-Barres** : Module de numérisation de code-barres par caméra (ZXing) avec fallback de saisie manuelle. Utilisation de la Cloud Function de raccordement s'appuyant sur l'API officielle OFF pour mapper les aliments industriels dans la base.
+*   **Garmin Import** : Support de l'import physique autonome par fichiers (ZIP, CSV, JSON, FIT) en local ou cloud. L'application prépare les interfaces de consentement du connecteur Garmin API direct sans simulation mensongère (carte informative "En préparation" désactivée par défaut).
+
+---
+
+## Nutrition : Moteurs et Règles Métier
 
 Pour maintenir une fiabilité analytique, le modèle énergétique actuel exige une base de profils corporels complète (poids, taille, masse grasse). Sans ces informations, l'application neutralise le niveau de certitude quant au risque de déficit et bloque ses estimations.
-Une feuille de route (Nutrition V1 Solide) prévoit l’intégration prochaine d'une base nutritionnelle canonique (micro et macro) gérant cru/cuit et portions exactes sans baser la recommandation sur des algorithmes génératifs, et gérée de manière complètement interne.
+Les calculs finaux de nutrition sont exclusivement exécutés par le code interne déterministe (`recipeEngine.ts`, `mealLogEngine.ts`), l'IA n'ayant aucune licence pour calculer les calories ou scores définitifs mais agissant comme un passeur de données fluide.
 
-## Tests
-Un script dédié (`npm run test`) couvre la prévention d'erreurs déterministes sur des snapshots fixes, validant les blocages liés à la composition corporelle, le rejet qualifié des métriques fautives, ou le respect des contraintes d'IA.
+---
+
+## Validation et Tests
+
+Un script dédié (`npm run test`) couvre la prévention d'erreurs déterministes sur des snapshots fixes, validant :
+*   Le blocage des calculs métaboliques sans composition corporelle.
+*   Le rejet qualifié des métriques incorrectes ou physiologiquement impossibles (Quarantaine).
+*   La non-régression sémantique avec blocage automatique des formulations et analogies médicales (`wordingPolicy.test.ts`).
+*   Le respect absolu de la logique "Draft" de l'IA sans pré-sauvegarde automatique dans la base.
+

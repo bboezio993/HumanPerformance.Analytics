@@ -9,6 +9,7 @@ import { resolveRecipeToMealItem } from "./src/domain/nutrition/recipeEngine";
 import { Recipe, MealItem, FoodItem } from "./src/domain/nutrition/foodTypes";
 import { calculateBaseline } from "./src/services/analysisEngine/baselines";
 import { triggerSyncHelper } from "./src/store/useStore";
+import "./src/domain/safety/wordingPolicy.test";
 
 console.log("====================================================");
 console.log("            AURA ELITE : SUITE DE TESTS INTEGRALE   ");
