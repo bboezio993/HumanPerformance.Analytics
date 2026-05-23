@@ -1,0 +1,342 @@
+{
+  "entities": {
+    "GarminMetric": {
+      "title": "Garmin Metric",
+      "description": "Represents a single parsed biometric or wellness metric (sleep, HRV, RHR).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier for the metric" },
+        "source": { "type": "string", "description": "Source of the metric (e.g., garmin, manual, derived)" },
+        "sourceId": { "type": "string", "description": "ID of the import log" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "ISO timestamp of the metric" },
+        "type": { "type": "string", "description": "Type of metric (sleep_duration, sleep_quality, rhr, hrv_rmssd)" },
+        "value": { "type": "number", "description": "Numeric value of the metric" },
+        "unit": { "type": "string", "description": "Unit (e.g., h, ms, bpm)" },
+        "confidenceScore": { "type": "number", "description": "Confidence of the parsing" },
+        "uid": { "type": "string", "description": "User ID owning the metric" }
+      },
+      "required": ["id", "source", "timestamp", "type", "value", "uid"]
+    },
+    "GarminImportLog": {
+      "title": "Garmin Import Log",
+      "description": "Log of an import action.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique identifier" },
+        "importDate": { "type": "string", "format": "date-time" },
+        "filename": { "type": "string" },
+        "status": { "type": "string", "enum": ["success", "error", "partial", "processing", "warning", "duplicate"] },
+        "recordsAdded": { "type": "number" },
+        "errorMessage": { "type": "string" },
+        "uid": { "type": "string", "description": "User ID owning the log" }
+      },
+      "required": ["id", "importDate", "filename", "status", "recordsAdded", "uid"]
+    },
+    "GarminActivity": {
+      "title": "Garmin Activity",
+      "description": "A single workout/activity imported from Garmin.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "date": { "type": "string" },
+        "duration": { "type": "string" },
+        "distance": { "type": "number" },
+        "calories": { "type": "number" },
+        "tss": { "type": "number" },
+        "uid": { "type": "string", "description": "User ID owning the activity" }
+      },
+      "required": ["id", "title", "type", "date", "duration", "distance", "calories", "uid"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User physiology and account settings.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "User ID" },
+        "general": { "type": "object" },
+        "health": { "type": "object" },
+        "sport": { "type": "object" },
+        "preferences": { "type": "object" }
+      },
+      "required": ["uid"]
+    },
+    "MealLog": {
+      "title": "Meal Log",
+      "description": "Represents dietary log entries.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "mealType": { "type": "string" },
+        "items": { "type": "array" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "mealType", "items", "uid"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "User custom compiled recipe.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "items": { "type": "array" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "name", "items", "uid"]
+    },
+    "HooperLog": {
+      "title": "Hooper Fatigue Log",
+      "description": "Extended standard scale subjective well-being tracking.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "fatigue": { "type": "number" },
+        "stress": { "type": "number" },
+        "sleepQuality": { "type": "number" },
+        "soreness": { "type": "number" },
+        "mood": { "type": "number" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "fatigue", "stress", "sleepQuality", "soreness", "mood", "uid"]
+    },
+    "SessionRPE": {
+      "title": "Session RPE",
+      "description": "Workout perceived exertion and feedback metrics.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "activityId": { "type": "string" },
+        "date": { "type": "string" },
+        "rpe": { "type": "number" },
+        "durationMinutes": { "type": "number" },
+        "feeling": { "type": "number" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "rpe", "durationMinutes", "feeling", "uid"]
+    },
+    "PainLog": {
+      "title": "Pain Log",
+      "description": "Athletic pain tracking logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "location": { "type": "string" },
+        "side": { "type": "string" },
+        "type": { "type": "string" },
+        "intensityRest": { "type": "number" },
+        "intensityActive": { "type": "number" },
+        "onset": { "type": "string" },
+        "impact": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "location", "intensityRest", "intensityActive", "uid"]
+    },
+    "MenstrualLog": {
+      "title": "Menstrual Log",
+      "description": "Menstrual cycle and symptoms logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "flow": { "type": "string" },
+        "painLevel": { "type": "number" },
+        "symptoms": { "type": "array" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "flow", "painLevel", "uid"]
+    },
+    "LifeContextLog": {
+      "title": "Life Context Log",
+      "description": "Daily life context tracker.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "travel": { "type": "boolean" },
+        "jetlag": { "type": "boolean" },
+        "alcohol": { "type": "boolean" },
+        "lateMeal": { "type": "boolean" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "uid"]
+    },
+    "WeeklyScreeningLog": {
+      "title": "Weekly Screening Log",
+      "description": "Weekly mental health scale logs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "pssScore": { "type": "number" },
+        "phq9Score": { "type": "number" },
+        "gad7Score": { "type": "number" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "pssScore", "phq9Score", "gad7Score", "uid"]
+    },
+    "AllergenBypassLog": {
+      "title": "Allergen Bypass Log",
+      "description": "User confirmed allergen override log.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "foodId": { "type": "string" },
+        "foodName": { "type": "string" },
+        "allergenDetected": { "type": "string" },
+        "mealType": { "type": "string" },
+        "userConfirmed": { "type": "boolean" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "date", "foodId", "foodName", "userConfirmed", "uid"]
+    },
+    "FavoriteFood": {
+      "title": "Favorite Food",
+      "description": "Personal favorite food selections.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "foodProductId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "brand": { "type": "string" },
+        "defaultPortion": { "type": "number" },
+        "defaultMealType": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "uid", "foodProductId", "displayName", "createdAt"]
+    },
+    "FoodProduct": {
+      "title": "Food Product",
+      "description": "Nutrient values for physical food products.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productName": { "type": "string" },
+        "brand": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["id", "productName", "uid"]
+    },
+    "NutritionDraft": {
+      "title": "Nutrition Draft",
+      "description": "Pertains to AI scannable files drafts.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "sourceType": { "type": "string" },
+        "sourceRef": { "type": "string" },
+        "confidence": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "uid", "sourceType", "status", "createdAt"]
+    },
+    "AiUsageLog": {
+      "title": "AI Usage Log",
+      "description": "Tracks users' AI API quota usage.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "feature": { "type": "string" },
+        "model": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "uid", "feature", "model", "status", "createdAt"]
+    },
+    "MigrationStatus": {
+      "title": "Migration Status",
+      "description": "Status tracking of users cloud database migration.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "migrationDate": { "type": "string" },
+        "isCompleted": { "type": "boolean" },
+        "schemaVersion": { "type": "string" }
+      },
+      "required": ["uid", "migrationDate", "isCompleted", "schemaVersion"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}/metrics/{metricId}": {
+      "schema": { "$ref": "#/entities/GarminMetric" },
+      "description": "User-specific collection of parsed metrics"
+    },
+    "/users/{uid}/garminImports/{logId}": {
+      "schema": { "$ref": "#/entities/GarminImportLog" },
+      "description": "User-specific collection of import logs"
+    },
+    "/users/{uid}/activities/{activityId}": {
+      "schema": { "$ref": "#/entities/GarminActivity" },
+      "description": "User-specific collection of workouts/activities"
+    },
+    "/users/{uid}/profile/main": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile with physiological configurations"
+    },
+    "/users/{uid}/mealLogs/{mealLogId}": {
+      "schema": { "$ref": "#/entities/MealLog" },
+      "description": "User-specific meal log entries with detailed nutrition metrics"
+    },
+    "/users/{uid}/recipes/{recipeId}": {
+      "schema": { "$ref": "#/entities/Recipe" },
+      "description": "User-specific custom recipes"
+    },
+    "/users/{uid}/hooperLogs/{hooperId}": {
+      "schema": { "$ref": "#/entities/HooperLog" },
+      "description": "User-specific daily well-being standard scale entries"
+    },
+    "/users/{uid}/sessionRpeLogs/{rpeId}": {
+      "schema": { "$ref": "#/entities/SessionRPE" },
+      "description": "User-specific workout difficulty perception logs"
+    },
+    "/users/{uid}/painLogs/{painId}": {
+      "schema": { "$ref": "#/entities/PainLog" },
+      "description": "User-specific local musculoskeletal pain tracking logs"
+    },
+    "/users/{uid}/menstrualLogs/{menstrualId}": {
+      "schema": { "$ref": "#/entities/MenstrualLog" },
+      "description": "User-specific menstrual symptoms logs"
+    },
+    "/users/{uid}/contextLogs/{contextId}": {
+      "schema": { "$ref": "#/entities/LifeContextLog" },
+      "description": "User-specific wellness context logs"
+    },
+    "/users/{uid}/weeklyScreeningLogs/{screeningId}": {
+      "schema": { "$ref": "#/entities/WeeklyScreeningLog" },
+      "description": "User-specific weekly questionnaires"
+    },
+    "/users/{uid}/allergenBypassLogs/{bypassId}": {
+      "schema": { "$ref": "#/entities/AllergenBypassLog" },
+      "description": "User-specific override events for flagged food allergens"
+    },
+    "/users/{uid}/favoriteFoods/{favFoodId}": {
+      "schema": { "$ref": "#/entities/FavoriteFood" },
+      "description": "User-specific bookmarked favorites"
+    },
+    "/users/{uid}/foodProducts/{productId}": {
+      "schema": { "$ref": "#/entities/FoodProduct" },
+      "description": "User-specific mapped physical products"
+    },
+    "/users/{uid}/nutritionDrafts/{draftId}": {
+      "schema": { "$ref": "#/entities/NutritionDraft" },
+      "description": "User-specific parsed interactive draft entries"
+    },
+    "/users/{uid}/aiUsageLogs/{usageId}": {
+      "schema": { "$ref": "#/entities/AiUsageLog" },
+      "description": "User-specific Gemini AI quota usage trace logs"
+    },
+    "/users/{uid}/migrationLogs/{userId}": {
+      "schema": { "$ref": "#/entities/MigrationStatus" },
+      "description": "User-specific Cloud Database local-to-cloud migration logs"
+    }
+  }
+}

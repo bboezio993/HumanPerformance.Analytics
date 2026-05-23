@@ -1,0 +1,333 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidMetric(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.source is string && data.source.size() < 50 &&
+             data.timestamp is string && data.timestamp.size() < 50 &&
+             data.type is string && data.type.size() < 100 &&
+             data.value is number &&
+             (!('confidenceScore' in data) || data.confidenceScore is number || data.confidenceScore == null) &&
+             (!('sourceId' in data) || data.sourceId is string || data.sourceId == null) &&
+             (!('unit' in data) || data.unit is string || data.unit == null);
+    }
+
+    function isValidImportLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.importDate is string && data.importDate.size() < 50 &&
+             data.filename is string && data.filename.size() < 500 &&
+             data.status is string && data.status in ["success", "error", "partial", "processing", "warning", "duplicate"] &&
+             data.recordsAdded is number &&
+             (!('errorMessage' in data) || data.errorMessage is string || data.errorMessage == null);
+    }
+
+    function isValidActivity(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.title is string && data.title.size() < 200 &&
+             data.type is string && data.type.size() < 100 &&
+             data.date is string && data.date.size() < 50 &&
+             data.duration is string && data.duration.size() < 50 &&
+             (!('distance' in data) || data.distance is number || data.distance == null) &&
+             (!('calories' in data) || data.calories is number || data.calories == null) &&
+             (!('avgHeartRate' in data) || data.avgHeartRate is number || data.avgHeartRate == null) &&
+             (!('maxHeartRate' in data) || data.maxHeartRate is number || data.maxHeartRate == null) &&
+             (!('tss' in data) || data.tss is number || data.tss == null) &&
+             (!('sourceId' in data) || data.sourceId is string || data.sourceId == null);
+    }
+
+    function isValidProfile(data) {
+      return data.uid is string;
+    }
+
+    function isValidMealLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.date is string && data.date.size() < 50 &&
+             data.mealType is string && data.mealType.size() < 100 &&
+             data.items is list;
+    }
+    
+    function isValidRecipe(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.name is string && data.name.size() < 300 &&
+             data.items is list;
+    }
+    
+    function isValidHooperLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.date is string && data.date.size() < 50 &&
+             data.fatigue is number &&
+             data.stress is number &&
+             data.sleepQuality is number &&
+             data.soreness is number &&
+             data.mood is number;
+    }
+    
+    function isValidSessionRpe(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.rpe is number &&
+             data.durationMinutes is number &&
+             data.feeling is number;
+    }
+    
+    function isValidPainLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.date is string && data.date.size() < 50 &&
+             data.location is string && data.location.size() < 150 &&
+             data.side is string &&
+             data.type is string &&
+             data.intensityRest is number &&
+             data.intensityActive is number &&
+             data.onset is string;
+    }
+    
+    function isValidMenstrualLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.date is string && data.date.size() < 50 &&
+             data.flow is string &&
+             data.painLevel is number &&
+             data.sleepQuality is number;
+    }
+    
+    function isValidContextLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.date is string && data.date.size() < 50 &&
+             data.travel is bool &&
+             data.jetlag is bool &&
+             data.alcohol is bool &&
+             data.lateMeal is bool;
+    }
+    
+    function isValidWeeklyScreeningLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.date is string && data.date.size() < 50 &&
+             data.pssScore is number &&
+             data.phq9Score is number &&
+             data.gad7Score is number;
+    }
+
+    function isValidNutrient(nut) {
+      return nut is map &&
+             nut.isMissing is bool &&
+             nut.unit is string &&
+             ( (nut.value is number && nut.isMissing == false) ||
+               (nut.value == null && nut.isMissing == true && (!('missingReason' in nut) || nut.missingReason is string)) );
+    }
+
+    function isValidAllergenBypassLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.foodId is string &&
+             data.allergenDetected is string;
+    }
+
+    function isValidAiUsageLog(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.feature is string &&
+             data.inputHash is string &&
+             data.model is string &&
+             data.cached is bool &&
+             data.status in ["draft", "confirmed", "rejected", "expired"] &&
+             data.createdAt is string;
+    }
+
+    function isValidFoodProduct(data) {
+      return data.uid is string &&
+             (data.id is string || data.barcode is string) &&
+             data.source is string &&
+             data.productName is string &&
+             data.nutrimentsPer100g is map &&
+             data.confidence is number &&
+             data.lastFetchedAt is string &&
+             (!('sourceCompleteness' in data) || data.sourceCompleteness is number) &&
+             (!('createdAt' in data) || data.createdAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('calories' in data.nutrimentsPer100g) || isValidNutrient(data.nutrimentsPer100g.calories)) &&
+             (!('protein' in data.nutrimentsPer100g) || isValidNutrient(data.nutrimentsPer100g.protein)) &&
+             (!('carbs' in data.nutrimentsPer100g) || isValidNutrient(data.nutrimentsPer100g.carbs)) &&
+             (!('fat' in data.nutrimentsPer100g) || isValidNutrient(data.nutrimentsPer100g.fat));
+    }
+
+    function isValidFavoriteFood(data) {
+      return data.uid is string &&
+             data.id is string &&
+             data.foodProductId is string &&
+             data.displayName is string &&
+             data.defaultPortion is number && data.defaultPortion > 0 && data.defaultPortion <= 5000 &&
+             data.defaultMealType is string && data.defaultMealType in ["Petit déjeuner", "Déjeuner", "Dîner", "En-cas", "breakfast", "lunch", "dinner", "snack"] &&
+             data.createdAt is string &&
+             (!('brand' in data) || data.brand is string) &&
+             (!('notes' in data) || data.notes is string) &&
+             (!('userNotes' in data) || data.userNotes is string) &&
+             (!('userCorrections' in data) || data.userCorrections is map);
+    }
+
+    function isValidNutritionDraft(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.status is string && data.status in ["draft", "confirmed", "rejected", "expired"] &&
+             data.sourceType is string && data.sourceType in ["barcode", "open_food_facts", "meal_photo_ai", "label_ocr", "recipe_text_ai", "voice_ai", "manual"] &&
+             data.sourceRef is string &&
+             data.extractedJson is map &&
+             data.createdAt is string &&
+             (!('updatedAt' in data) || data.updatedAt is string);
+    }
+
+    function isValidMigrationLog(data) {
+      return data.uid is string &&
+             data.migrationDate is string &&
+             data.isCompleted is bool &&
+             data.schemaVersion is string &&
+             data.domainsMigrated is list &&
+             data.itemCount is number &&
+             (!('errors' in data) || data.errors is list);
+    }
+
+    // ===============================================================
+    // Nested User-Specific Collections Layout (/users/{userId}/...)
+    // ===============================================================
+    
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      match /profile/{profileDocId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidProfile(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /metrics/{metricId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidMetric(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /garminImports/{logId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidImportLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /activities/{activityId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidActivity(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /mealLogs/{mealLogId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidMealLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /recipes/{recipeId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidRecipe(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /hooperLogs/{hooperId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidHooperLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /sessionRpeLogs/{rpeId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidSessionRpe(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /painLogs/{painId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidPainLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /menstrualLogs/{menstrualId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidMenstrualLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /contextLogs/{contextId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidContextLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /weeklyScreeningLogs/{screeningId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidWeeklyScreeningLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /allergenBypassLogs/{logId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidAllergenBypassLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /aiUsageLogs/{usageId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidAiUsageLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /foodProducts/{productId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidFoodProduct(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /favoriteFoods/{favId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidFavoriteFood(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /nutritionDrafts/{draftId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidNutritionDraft(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /migrationLogs/{migrationId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidMigrationLog(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+    }
+  }
+}
