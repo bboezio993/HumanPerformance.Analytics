@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { EngineExplainabilityCard } from "../components/dashboard/EngineExplainabilityCard";
 
 export function Mental() {
   const { hooperLogs, weeklyScreeningLogs, engineScores } = useStore();
@@ -139,6 +140,12 @@ export function Mental() {
             </div>
           </div>
         </div>
+
+        {engineScores?.psychologicalLoad?.explainability && (
+          <div className="mb-8">
+            <EngineExplainabilityCard result={engineScores.psychologicalLoad.explainability} title="Charge Psychologique" />
+          </div>
+        )}
 
         {hooperLogs.length > 0 && (
           <div className="bento-card mb-8">

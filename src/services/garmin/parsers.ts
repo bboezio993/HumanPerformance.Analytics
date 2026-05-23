@@ -2,6 +2,7 @@ import Papa from 'papaparse';
 import FitParser from 'fit-file-parser';
 import { useStore } from '../../store/useStore';
 import { GarminActivity, NormalizedMetric } from '../../types';
+import { GarminImportService } from './garminImportService';
 
 export const parseActivityCSV = async (csvString: string, logId: string) => {
   return new Promise<void>((resolve, reject) => {
@@ -44,21 +45,16 @@ export const parseActivityCSV = async (csvString: string, logId: string) => {
             });
 
           const { addGarminActivities, updateGarminImportLog, garminImportLogs } = useStore.getState();
-          addGarminActivities(activities);
+          const { added, duplicates } = GarminImportService.deduplicateActivities(activities);
           
-          import('../firebaseSync').then(({ syncActivitiesToFirestore }) => {
-            syncActivitiesToFirestore(activities);
-          }).catch(() => {});
-          
-          // Update log counts
-          const currentLog = garminImportLogs.find(l => l.id === logId);
-          if (currentLog) {
-            updateGarminImportLog(logId, { 
-              recordsAdded: (currentLog.recordsAdded || 0) + activities.length,
-              status: activities.length > 0 ? 'success' : 'warning',
-              errorMessage: activities.length === 0 ? 'Aucune activité trouvée dans le CSV.' : undefined
-            });
+          if (added.length > 0) {
+            addGarminActivities(added);
+            import('../firebaseSync').then(({ syncActivitiesToFirestore }) => {
+              syncActivitiesToFirestore(added);
+            }).catch(() => {});
           }
+          
+          GarminImportService.processLogResult(logId, added.length, duplicates, 0, 0);
           resolve();
         } catch (error) {
           reject(error);
@@ -142,20 +138,16 @@ export const parseActivityJSON = async (jsonString: string, logId: string) => {
       });
 
     if (activities.length > 0) {
-      addGarminActivities(activities);
+      const { added, duplicates } = GarminImportService.deduplicateActivities(activities);
       
-      // Async sync to firestore
-      import('../firebaseSync').then(({ syncActivitiesToFirestore }) => {
-        syncActivitiesToFirestore(activities);
-      }).catch(() => {});
-      
-      const currentLog = garminImportLogs.find(l => l.id === logId);
-      if (currentLog) {
-        updateGarminImportLog(logId, { 
-          recordsAdded: (currentLog.recordsAdded || 0) + activities.length,
-          status: 'success'
-        });
+      if (added.length > 0) {
+        addGarminActivities(added);
+        import('../firebaseSync').then(({ syncActivitiesToFirestore }) => {
+          syncActivitiesToFirestore(added);
+        }).catch(() => {});
       }
+      
+      GarminImportService.processLogResult(logId, added.length, duplicates, 0, 0);
     }
   } catch (error) {
     console.error("Error parsing activity JSON:", error);
@@ -427,18 +419,14 @@ export const parseWellnessJSON = async (jsonString: string, logId: string) => {
     });
 
     if (metrics.length > 0) {
-      addMetrics(metrics);
-      import('../firebaseSync').then(({ syncMetricsToFirestore }) => {
-         syncMetricsToFirestore(metrics);
-      }).catch(() => {});
-      
-      const currentLog = garminImportLogs.find(l => l.id === logId);
-      if (currentLog) {
-        updateGarminImportLog(logId, { 
-          recordsAdded: (currentLog.recordsAdded || 0) + metrics.length,
-          status: 'success'
-        });
+      const { added, duplicates } = GarminImportService.deduplicateMetrics(metrics);
+      if (added.length > 0) {
+        addMetrics(added);
+        import('../firebaseSync').then(({ syncMetricsToFirestore }) => {
+           syncMetricsToFirestore(added);
+        }).catch(() => {});
       }
+      GarminImportService.processLogResult(logId, added.length, duplicates, 0, 0);
     }
   } catch (error) {
     console.error("Error parsing wellness JSON:", error);
@@ -575,17 +563,14 @@ export const parseWellnessFIT = async (arrayBuffer: ArrayBuffer, logId: string) 
         }
 
         if (metrics.length > 0) {
-          addMetrics(metrics);
-          import('../firebaseSync').then(({ syncMetricsToFirestore }) => {
-             syncMetricsToFirestore(metrics);
-          }).catch(() => {});
-          const currentLog = garminImportLogs.find(l => l.id === logId);
-          if (currentLog) {
-            updateGarminImportLog(logId, { 
-              recordsAdded: (currentLog.recordsAdded || 0) + metrics.length,
-              status: 'success'
-            });
+          const { added, duplicates } = GarminImportService.deduplicateMetrics(metrics);
+          if (added.length > 0) {
+            addMetrics(added);
+            import('../firebaseSync').then(({ syncMetricsToFirestore }) => {
+               syncMetricsToFirestore(added);
+            }).catch(() => {});
           }
+          GarminImportService.processLogResult(logId, added.length, duplicates, 0, 0);
         }
         resolve();
       } catch (e) {

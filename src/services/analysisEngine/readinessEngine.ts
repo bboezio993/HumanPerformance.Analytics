@@ -2,7 +2,7 @@ import { AppState } from "../../store/useStore";
 import { ModularEngineResult } from "./types";
 import { Driver } from "./engine";
 
-export function runReadinessEngine(state: AppState, recoveryRes: ModularEngineResult, trainingRes: ModularEngineResult): ModularEngineResult {
+export function runReadinessEngine(state: AppState, recoveryRes: ModularEngineResult, trainingRes: ModularEngineResult, mentalRes: ModularEngineResult, nutritionRes: ModularEngineResult): ModularEngineResult {
   const todayStr = new Date().toISOString().split("T")[0];
   const yesterdayStr = new Date(Date.now() - 24 * 3600 * 1000).toISOString().split("T")[0];
 
@@ -83,6 +83,22 @@ export function runReadinessEngine(state: AppState, recoveryRes: ModularEngineRe
     negativeDrivers.push({ metricId: "illness_symptoms", label: "Indisposition", value: 1, impact: "negative", note: "Symptômes déclarés" });
     dataUsed.push("illness_symptoms");
     limits.push("Symptômes d'indisposition passagère déclarés : readiness plafonnée de manière protectrice.");
+  }
+  
+  if (mentalRes.score > 0 && mentalRes.confidence > 0) {
+    dataUsed.push("mental_score");
+    if (mentalRes.score < 40) {
+      readinessScore -= 10;
+      negativeDrivers.push({ metricId: "mental_score", label: "Charge Mentale/Stress", value: mentalRes.score, impact: "negative", note: "Impact négatif sur la disponibilité" });
+    }
+  }
+
+  if (nutritionRes.score > 0 && nutritionRes.confidence > 0) {
+    dataUsed.push("nutrition_score");
+    if (nutritionRes.score < 40) {
+      readinessScore -= 5;
+      negativeDrivers.push({ metricId: "nutrition_score", label: "Nutrition", value: nutritionRes.score, impact: "negative", note: "Carences ou déséquilibres récents" });
+    }
   }
 
   readinessScore = Math.max(0, Math.min(100, readinessScore));

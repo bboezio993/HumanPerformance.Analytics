@@ -1,4 +1,5 @@
 import { NutritionGoal } from "../domain/nutrition/foodTypes";
+import { ModularEngineResult } from "../services/analysisEngine/types";
 
 export type ReadinessScore = number; // 0-100
 
@@ -172,6 +173,9 @@ export interface BaselineStats {
   zScore28d: number;
   robustZScore28d: number; // (current - median28d) / mad28d
   cv28d: number; // Coefficient de variation (std/mean)
+  ewma7d: number;
+  ewma28d: number;
+  coverage28d: number; // Pourcentage de couverture
   trend: "increasing" | "decreasing" | "stable";
 }
 
@@ -182,26 +186,31 @@ export interface EngineScores {
     score: number;
     confidence: number;
     status: "optimal" | "normal" | "low" | "reduced" | "caution";
+    explainability: ModularEngineResult;
   };
   recoveryStatus: {
     score: number;
     confidence: number;
     status: "recovered" | "adapting" | "fatigued" | "exhausted";
+    explainability: ModularEngineResult;
   };
   sleepHealth: {
     score: number;
     confidence: number;
     status: "optimal" | "adequate" | "debt" | "severe_debt";
+    explainability: ModularEngineResult;
   };
   nutritionAdequacy: {
     score: number;
     confidence: number;
     status: "optimal" | "adequate" | "low" | "incomplete" | "watch";
+    explainability: ModularEngineResult;
   };
   psychologicalLoad: {
     score: number;
     confidence: number;
     status: "low" | "moderate" | "high" | "overload";
+    explainability: ModularEngineResult;
   };
   riskBoundary: {
     flags: string[];

@@ -1,5 +1,5 @@
 import { NormalizedMetric, BaselineStats } from '../../types';
-import { calculateMean, calculateStdDev, calculateZScore, calculateCV, calculateMedian, calculateMAD } from './math';
+import { calculateMean, calculateStdDev, calculateZScore, calculateCV, calculateMedian, calculateMAD, calculateEWMA } from './math';
 
 /**
  * Filtre les métriques d'un certain type sur une période donnée (en jours)
@@ -75,6 +75,10 @@ export const calculateBaseline = (
   
   const cv28d = calculateCV(mean28d, std28d);
   
+  const ewma7d = calculateEWMA(values7d, 2 / (7 + 1));
+  const ewma28d = calculateEWMA(values28d, 2 / (28 + 1));
+  const coverage28d = (values28d.length / 28) * 100;
+  
   // Détermination de la tendance (très basique pour l'instant)
   let trend: 'increasing' | 'decreasing' | 'stable' = 'stable';
   if (mean7d > mean28d + (std28d * 0.5)) trend = 'increasing';
@@ -97,6 +101,9 @@ export const calculateBaseline = (
     zScore28d,
     robustZScore28d,
     cv28d,
+    ewma7d,
+    ewma28d,
+    coverage28d,
     trend
   };
 };

@@ -2,6 +2,7 @@ import JSZip from 'jszip';
 import { useStore } from '../../store/useStore';
 import { parseActivityCSV, parseWellnessJSON, parseWellnessFIT, parseActivityJSON } from './parsers';
 import { GarminImportType } from '../../types';
+import { GarminImportService } from './garminImportService';
 
 export const processGarminFile = async (file: File, type: GarminImportType, logId: string) => {
   const baseUpdateLog = useStore.getState().updateGarminImportLog;
@@ -251,8 +252,11 @@ const processCSV = async (file: File, logId: string, updateLog: any) => {
           });
           
           if (metrics.length > 0) {
-            addMetrics(metrics);
-            updateLog(logId, { status: 'success', recordsAdded: metrics.length });
+            const { added, duplicates } = GarminImportService.deduplicateMetrics(metrics);
+            if (added.length > 0) {
+              addMetrics(added);
+            }
+            GarminImportService.processLogResult(logId, added.length, duplicates, 0, 0);
           } else {
             // Fallback to activity parsing if no sleep data found
             parseActivityCSV(text, logId);

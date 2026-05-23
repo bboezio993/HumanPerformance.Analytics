@@ -478,6 +478,36 @@ export const metricRegistry: Record<string, MetricDefinition> = {
     scientificStatus: "probable",
     medicalRisk: "none"
   },
+  lthr: {
+    id: "lthr",
+    domain: "training",
+    label: "Seuil Lactique (FC)",
+    description: "Fréquence cardiaque au seuil lactique estimée par Garmin.",
+    unit: "bpm",
+    allowedUnits: ["bpm"],
+    sourceTypes: ["garmin"],
+    valueType: "number",
+    aggregation: "latest",
+    higherIsBetter: true,
+    confidenceRules: ["Dépend de la précision des données d'effort maximal récents"],
+    scientificStatus: "probable",
+    medicalRisk: "none"
+  },
+  ftp: {
+    id: "ftp",
+    domain: "training",
+    label: "Puissance au Seuil Fonctionnel (FTP)",
+    description: "Estimation de la puissance pouvant être maintenue pendant 1h.",
+    unit: "W",
+    allowedUnits: ["W"],
+    sourceTypes: ["garmin", "manual"],
+    valueType: "number",
+    aggregation: "latest",
+    higherIsBetter: true,
+    confidenceRules: ["Dépend de la qualité du capteur de puissance et d'efforts maximaux"],
+    scientificStatus: "probable",
+    medicalRisk: "none"
+  },
   vo2max: {
     id: "vo2max",
     domain: "biometrics",

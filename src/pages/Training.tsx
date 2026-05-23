@@ -22,6 +22,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EngineExplainabilityCard } from "../components/dashboard/EngineExplainabilityCard";
 
 const COLORS = ['#FF9500', '#0071E3', '#34C759', '#5856D6', '#FF2D55', '#AF52DE'];
 
@@ -229,6 +230,12 @@ export function Training() {
             <div className={`text-[12px] mt-1 ${acwrColor}`}>{acwrStatus}</div>
           </div>
         </div>
+
+        {engineScores?.performanceReadiness?.explainability && (
+          <div className="mb-8">
+            <EngineExplainabilityCard result={engineScores.performanceReadiness.explainability} title="Performance Readiness" />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="bento-card lg:col-span-2">

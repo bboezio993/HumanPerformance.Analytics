@@ -106,18 +106,18 @@ function DailyCheckInForm({ onSuccess }: FormProps) {
   const [notes, setNotes] = useState('');
 
   const handleVoiceParsed = (parsed: any) => {
-    if (parsed.fatigue !== undefined) setFatigue(Number(parsed.fatigue));
-    if (parsed.stress !== undefined) setStress(Number(parsed.stress));
-    if (parsed.sleepQuality !== undefined) setSleep(Number(parsed.sleepQuality));
-    if (parsed.soreness !== undefined) setSoreness(Number(parsed.soreness));
-    if (parsed.mood !== undefined) setMood(Number(parsed.mood));
-    if (parsed.motivation !== undefined) setMotivation(Number(parsed.motivation));
-    if (parsed.painLevel !== undefined) setPainLevel(Number(parsed.painLevel));
-    if (parsed.digestion !== undefined) setDigestion(Number(parsed.digestion));
-    if (parsed.appetite !== undefined) setAppetite(Number(parsed.appetite));
-    if (parsed.recovery !== undefined) setRecovery(Number(parsed.recovery));
-    if (parsed.isIll !== undefined) setIsIll(Boolean(parsed.isIll));
-    if (parsed.notes) setNotes(parsed.notes);
+    if (parsed.fatigue?.value !== undefined) setFatigue(Number(parsed.fatigue.value));
+    if (parsed.stress?.value !== undefined) setStress(Number(parsed.stress.value));
+    if (parsed.sleepQuality?.value !== undefined) setSleep(Number(parsed.sleepQuality.value));
+    if (parsed.soreness?.value !== undefined) setSoreness(Number(parsed.soreness.value));
+    if (parsed.mood?.value !== undefined) setMood(Number(parsed.mood.value));
+    if (parsed.motivation?.value !== undefined) setMotivation(Number(parsed.motivation.value));
+    if (parsed.painLevel?.value !== undefined) setPainLevel(Number(parsed.painLevel.value));
+    if (parsed.digestion?.value !== undefined) setDigestion(Number(parsed.digestion.value));
+    if (parsed.appetite?.value !== undefined) setAppetite(Number(parsed.appetite.value));
+    if (parsed.recovery?.value !== undefined) setRecovery(Number(parsed.recovery.value));
+    if (parsed.isIll?.value !== undefined) setIsIll(Boolean(parsed.isIll.value));
+    if (parsed.notes?.value) setNotes(parsed.notes.value);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -404,15 +404,15 @@ function PostSessionRPEForm({ onSuccess }: FormProps) {
   const linkedAct = activities.find(a => a.id === actId);
 
   const handleVoiceParsed = (parsed: any) => {
-    if (parsed.rpe !== undefined) setRpe(Number(parsed.rpe));
-    if (parsed.muscularLoad !== undefined) setMuscLoad(Number(parsed.muscularLoad));
-    if (parsed.cardioLoad !== undefined) setCardioLoad(Number(parsed.cardioLoad));
-    if (parsed.painDuring !== undefined) setPainDuring(Boolean(parsed.painDuring));
-    if (parsed.painLocation !== undefined) setPainLocation(parsed.painLocation);
-    if (parsed.postPainIntensity !== undefined) setPostPain(Number(parsed.postPainIntensity));
-    if (parsed.techniqueSensation !== undefined) setTechnique(Number(parsed.techniqueSensation));
-    if (parsed.conformanceToPlan !== undefined) setComform(Boolean(parsed.conformanceToPlan));
-    if (parsed.comment !== undefined) setComment(parsed.comment);
+    if (parsed.rpe?.value !== undefined) setRpe(Number(parsed.rpe.value));
+    if (parsed.muscularLoad?.value !== undefined) setMuscLoad(Number(parsed.muscularLoad.value));
+    if (parsed.cardioLoad?.value !== undefined) setCardioLoad(Number(parsed.cardioLoad.value));
+    if (parsed.painDuring?.value !== undefined) setPainDuring(Boolean(parsed.painDuring.value));
+    if (parsed.painLocation?.value !== undefined) setPainLocation(parsed.painLocation.value);
+    if (parsed.postPainIntensity?.value !== undefined) setPostPain(Number(parsed.postPainIntensity.value));
+    if (parsed.techniqueSensation?.value !== undefined) setTechnique(Number(parsed.techniqueSensation.value));
+    if (parsed.conformanceToPlan?.value !== undefined) setComform(Boolean(parsed.conformanceToPlan.value));
+    if (parsed.comment?.value !== undefined) setComment(parsed.comment.value);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -85,6 +85,26 @@ export function runTrainingLoadEngine(state: AppState): ModularEngineResult {
     }
   }
 
+  // Adding Monotony driver indication
+  if (monotony > 2.0 && score > 30) {
+     score -= 10;
+     negativeDrivers.push({
+        metricId: "monotony",
+        label: "Monotonie",
+        impact: "negative",
+        value: monotony.toFixed(2),
+        note: "Manque de variation de l'intensité d'entraînement."
+      });
+  } else if (monotony < 1.5 && sumAcute > 0) {
+      positiveDrivers.push({
+        metricId: "monotony",
+        label: "Monotonie",
+        impact: "positive",
+        value: monotony.toFixed(2),
+        note: "Bonne variation des charges d'entraînement journalières."
+      });
+  }
+
   return {
     score,
     status,

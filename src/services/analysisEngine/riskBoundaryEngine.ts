@@ -55,6 +55,17 @@ export function runRiskBoundaryEngine(
     flags.push("Disponibilité énergétique possiblement basse si les apports saisis sont complets.");
   }
 
+  // 6. Weight loss check
+  const weightLogs = state.metrics.filter(m => m.type === "weight").sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  if (weightLogs.length >= 2) {
+    const originalWeight = weightLogs[0].value;
+    const currentWeight = weightLogs[weightLogs.length - 1].value;
+    const weightLossPercentage = ((originalWeight - currentWeight) / originalWeight) * 100;
+    if (weightLossPercentage > 5) {
+      flags.push("Baisse de poids rapide identifiée, à interpréter selon votre programme, mais signal possible de disponibilité énergétique réduite.");
+    }
+  }
+
   // If we have minimal data
   if (trainingRes.confidence < 30 && recoveryRes.confidence < 30) {
     flags.push("Données insuffisantes pour conclure à un risque individuel précis.");

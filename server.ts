@@ -252,22 +252,49 @@ Règles :
 - pain : localisation de douleur, intensité (0-10), description, facteurs déclenchants.
 Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFields'.`;
 
+      const fieldNumberConfig = {
+        type: Type.OBJECT,
+        properties: {
+          value: { type: Type.NUMBER },
+          confidence: { type: Type.INTEGER, description: "Confiance de l'IA (0-100)" },
+          uncertaintyReason: { type: Type.STRING }
+        }
+      };
+      
+      const fieldStringConfig = {
+        type: Type.OBJECT,
+        properties: {
+          value: { type: Type.STRING },
+          confidence: { type: Type.INTEGER, description: "Confiance de l'IA (0-100)" },
+          uncertaintyReason: { type: Type.STRING }
+        }
+      };
+
+      const fieldBooleanConfig = {
+        type: Type.OBJECT,
+        properties: {
+          value: { type: Type.BOOLEAN },
+          confidence: { type: Type.INTEGER, description: "Confiance de l'IA (0-100)" },
+          uncertaintyReason: { type: Type.STRING }
+        }
+      };
+
       const schemas: Record<string, any> = {
         daily: {
           type: Type.OBJECT,
           properties: {
-            fatigue: { type: Type.INTEGER, description: "Fatigue (1 à 7)" },
-            stress: { type: Type.INTEGER, description: "Stress (1 à 7)" },
-            sleepQuality: { type: Type.INTEGER, description: "Qualité sommeil (1 à 7)" },
-            soreness: { type: Type.INTEGER, description: "Courbatures (1 à 7)" },
-            mood: { type: Type.INTEGER, description: "Humeur (1 à 7)" },
-            motivation: { type: Type.INTEGER, description: "Motivation (1 à 7)" },
-            painLevel: { type: Type.INTEGER, description: "Niveau de douleur (0 à 10)" },
-            digestion: { type: Type.INTEGER, description: "Digestion (1 à 5)" },
-            appetite: { type: Type.INTEGER, description: "Appétit (1 à 5)" },
-            recovery: { type: Type.INTEGER, description: "Récupération subjective (1 à 10)" },
-            isIll: { type: Type.BOOLEAN, description: "Symptôme de maladie" },
-            notes: { type: Type.STRING },
+            fatigue: fieldNumberConfig,
+            stress: fieldNumberConfig,
+            sleepQuality: fieldNumberConfig,
+            soreness: fieldNumberConfig,
+            mood: fieldNumberConfig,
+            motivation: fieldNumberConfig,
+            painLevel: fieldNumberConfig,
+            digestion: fieldNumberConfig,
+            appetite: fieldNumberConfig,
+            recovery: fieldNumberConfig,
+            isIll: fieldBooleanConfig,
+            notes: fieldStringConfig,
             missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
             uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
             requiresValidation: { type: Type.BOOLEAN }
@@ -277,11 +304,11 @@ Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFi
         rpe: {
           type: Type.OBJECT,
           properties: {
-            rpe: { type: Type.INTEGER, description: "Intensité d'effort RPE (1 à 10)" },
-            durationMinutes: { type: Type.INTEGER, description: "Durée en minutes" },
-            feeling: { type: Type.INTEGER, description: "Feeling (1 à 5)" },
-            comment: { type: Type.STRING },
-            conformanceToPlan: { type: Type.BOOLEAN },
+            rpe: fieldNumberConfig,
+            durationMinutes: fieldNumberConfig,
+            feeling: fieldNumberConfig,
+            comment: fieldStringConfig,
+            conformanceToPlan: fieldBooleanConfig,
             missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
             uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
             requiresValidation: { type: Type.BOOLEAN }
@@ -316,15 +343,15 @@ Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFi
         pain: {
           type: Type.OBJECT,
           properties: {
-            localisation: { type: Type.STRING },
-            intensity: { type: Type.INTEGER, description: "Douleur 0 à 10" },
-            description: { type: Type.STRING },
-            aggravatingFactors: { type: Type.STRING },
+            localisation: fieldStringConfig,
+            intensity: fieldNumberConfig,
+            description: fieldStringConfig,
+            aggravatingFactors: fieldStringConfig,
             missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
             uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
             requiresValidation: { type: Type.BOOLEAN }
           },
-          required: ["localisation", "intensity", "missingFields", "uncertainFields", "requiresValidation"]
+          required: ["missingFields", "uncertainFields", "requiresValidation"]
         }
       };
 

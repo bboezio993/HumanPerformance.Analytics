@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { EngineExplainabilityCard } from "../components/dashboard/EngineExplainabilityCard";
 
 const formatDuration = (hours: number) => {
   const h = Math.floor(hours);
@@ -14,6 +15,7 @@ const formatDuration = (hours: number) => {
 
 export function Sleep() {
   const metrics = useStore(state => state.metrics);
+  const engineScores = useStore(state => state.engineScores);
   
   const sleepScores = useMemo(() => {
     return metrics.filter(m => m.type === 'sleep_score').reduce((acc, m) => {
@@ -124,6 +126,12 @@ export function Sleep() {
             <div className="text-[14px] text-white/80 mt-1">{qualitySub}</div>
           </div>
         </div>
+
+        {engineScores?.sleepHealth?.explainability && (
+          <div className="mb-8">
+            <EngineExplainabilityCard result={engineScores.sleepHealth.explainability} title="Santé du Sommeil" />
+          </div>
+        )}
 
         <div className="bento-card mb-8">
           <h3 className="text-lg font-semibold mb-6">Évolution de la durée du sommeil</h3>

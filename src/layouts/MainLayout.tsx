@@ -59,6 +59,7 @@ export function MainLayout() {
           <NavItem to="/mental" icon={<Brain size={20} />} label="Mental" />
           <Separator className="my-2" />
           <NavItem to="/connections" icon={<LinkIcon size={20} />} label="Sources & Données" />
+          <NavItem to="/quality" icon={<Activity size={20} />} label="Sources & Qualité" />
           <NavItem to="/confidentiality" icon={<ShieldAlert size={20} />} label="Sécurité & Cloud" />
         </nav>
 

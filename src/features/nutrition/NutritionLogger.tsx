@@ -7,6 +7,7 @@ import { convertCookingState } from '../../domain/nutrition/cookingYield';
 import { resolveRecipeToMealItem } from '../../domain/nutrition/recipeEngine';
 import { foodNutrientDatabase } from '../../domain/nutrition/foodNutrientValues';
 import { CoreNutrients } from '../../domain/nutrition/nutrientDefinitions';
+import { getConfidenceLabel } from '../../domain/nutrition/dataQualityService';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Check, Search, ChevronRight, Apple, Flame, Award, AlertTriangle, Clipboard, BookOpen, Heart, Sparkles as SparklesIcon, Scan, FileText, Camera, Utensils, Mic } from 'lucide-react';
@@ -1158,6 +1159,11 @@ export function NutritionLogger() {
                       <p className="text-xs font-bold">{it.foodName}</p>
                       <p className="text-[10px] text-muted-foreground font-mono">
                         {it.quantity} {it.unit} &rarr; approx {Math.round(it.gramsSelected)}g • {it.calories} kcal
+                        {it.conversionConfidence !== undefined && (
+                          <span className="ml-1 text-[9px] px-1 py-0.5 rounded bg-secondary/50 border">
+                            {getConfidenceLabel(it.conversionConfidence)} ({it.conversionConfidence}%)
+                          </span>
+                        )}
                       </p>
                     </div>
                     <button

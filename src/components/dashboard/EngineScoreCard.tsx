@@ -70,7 +70,7 @@ export function EngineScoreCard({ scores }: EngineScoreCardProps) {
       )}
 
       {/* The 5 Core Domains */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Performance Readiness */}
         <div className="bento-card p-4">
           <div className="flex justify-between items-start mb-2">
@@ -133,6 +133,22 @@ export function EngineScoreCard({ scores }: EngineScoreCardProps) {
             <span className="text-xs text-muted-foreground uppercase">{scores.psychologicalLoad.status.replace('_', ' ')}</span>
           </div>
           {renderScoreBar(scores.psychologicalLoad.score, scores.psychologicalLoad.status, 'psych')}
+        </div>
+
+        {/* Nutrition Adequacy */}
+        <div className="bento-card p-4">
+          <div className="flex justify-between items-start mb-2">
+            <div className="flex items-center gap-2">
+              <Apple size={16} className="text-[#34C759]" />
+              <span className="font-semibold text-sm">Nutrition Adequacy</span>
+            </div>
+            {getConfidenceBadge(scores.nutritionAdequacy.confidence)}
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold">{scores.nutritionAdequacy.score}</span>
+            <span className="text-xs text-muted-foreground uppercase">{scores.nutritionAdequacy.status.replace('_', ' ')}</span>
+          </div>
+          {renderScoreBar(scores.nutritionAdequacy.score, scores.nutritionAdequacy.status, 'nutrition')}
         </div>
       </div>
     </div>

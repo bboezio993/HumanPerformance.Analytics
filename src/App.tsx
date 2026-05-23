@@ -15,6 +15,7 @@ import { Nutrition } from './pages/Nutrition';
 import { Mental } from './pages/Mental';
 import { Connections } from './pages/Connections';
 import { GarminImportHub } from './pages/GarminImportHub';
+import { SourcesQualityPage } from './pages/SourcesQualityPage';
 import { Settings } from './pages/Settings';
 import { MenstrualCycle } from './pages/MenstrualCycle';
 import { Confidentiality } from './pages/Confidentiality';
@@ -36,6 +37,7 @@ export default function App() {
             <Route path="mental" element={<Mental />} />
             <Route path="connections" element={<Connections />} />
             <Route path="connections/garmin" element={<GarminImportHub />} />
+            <Route path="quality" element={<SourcesQualityPage />} />
             <Route path="settings" element={<Settings />} />
             <Route path="confidentiality" element={<Confidentiality />} />
           </Route>

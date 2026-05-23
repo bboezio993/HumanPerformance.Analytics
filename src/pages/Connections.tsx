@@ -151,8 +151,8 @@ export function Connections() {
           {/* Main action card */}
           <div className="bento-card border border-[#0071E3]/20 bg-[#0071E3]/5 p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="space-y-1">
-              <span className="text-[11px] font-mono tracking-wider text-[#0071E3] font-bold uppercase">Source Principale</span>
-              <h3 className="text-xl font-bold">Import direct d'enregistrements Garmin Connect</h3>
+              <span className="text-[11px] font-mono tracking-wider text-[#0071E3] font-bold uppercase">Source Principale (Fichiers)</span>
+              <h3 className="text-xl font-bold">Import historique & fichiers Garmin Connect</h3>
               <p className="text-sm text-muted-foreground max-w-2xl">
                 Alimentez les modules physiologiques en important votre archive complète ZIP issue de Garmin Connect, ou directement vos fichiers FIT d'activité et JSON de bien-être.
               </p>
@@ -164,6 +164,16 @@ export function Connections() {
             >
               Importer un fichier <ChevronRight size={16} className="ml-1" />
             </Button>
+          </div>
+
+          <div className="bento-card border border-border p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-6 opacity-80 cursor-not-allowed filter grayscale hover:grayscale-0 transition-all">
+            <div className="space-y-1">
+              <span className="text-[11px] font-mono tracking-wider text-muted-foreground font-bold uppercase">En préparation pour la Beta finale</span>
+              <h3 className="text-xl font-bold flex items-center gap-2 text-muted-foreground">API Garmin officielle <Badge variant="secondary" className="text-[10px] ml-2 font-mono">Bientôt disponible</Badge></h3>
+              <p className="text-sm text-muted-foreground max-w-2xl">
+                La connexion directe (OAuth) est en cours de préparation pour automatiser les imports quotidiens. L'import manuel reste le flux principal garanti pour cette étape de Beta. Aucune autorisation n'est encore active.
+              </p>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

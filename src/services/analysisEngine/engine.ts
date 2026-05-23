@@ -72,7 +72,7 @@ export const runAnalysisEngine = (state: AppState): EngineScores => {
   const trainingRes = runTrainingLoadEngine(state);
   const contextRes = runContextEngine(state);
   const riskRes = runRiskBoundaryEngine(state, trainingRes, recoveryRes, sleepRes, nutritionRes, contextRes);
-  const readinessRes = runReadinessEngine(state, recoveryRes, trainingRes);
+  const readinessRes = runReadinessEngine(state, recoveryRes, trainingRes, mentalRes, nutritionRes);
 
   const acwrValue = trainingRes.positiveDrivers.find(d => d.metricId === "acwr")?.value 
     || trainingRes.negativeDrivers.find(d => d.metricId === "acwr")?.value 
@@ -84,27 +84,32 @@ export const runAnalysisEngine = (state: AppState): EngineScores => {
     performanceReadiness: {
       score: readinessRes.score,
       confidence: readinessRes.confidence,
-      status: readinessRes.status as any
+      status: readinessRes.status as any,
+      explainability: readinessRes
     },
     recoveryStatus: {
       score: recoveryRes.score,
       confidence: recoveryRes.confidence,
-      status: recoveryRes.status as any
+      status: recoveryRes.status as any,
+      explainability: recoveryRes
     },
     sleepHealth: {
       score: sleepRes.score,
       confidence: sleepRes.confidence,
-      status: sleepRes.status as any
+      status: sleepRes.status as any,
+      explainability: sleepRes
     },
     nutritionAdequacy: {
       score: nutritionRes.score,
       confidence: nutritionRes.confidence,
-      status: nutritionRes.status as any
+      status: nutritionRes.status as any,
+      explainability: nutritionRes
     },
     psychologicalLoad: {
       score: mentalRes.score,
       confidence: mentalRes.confidence,
-      status: mentalRes.status as any
+      status: mentalRes.status as any,
+      explainability: mentalRes
     },
     riskBoundary: {
       flags: riskRes.flags,

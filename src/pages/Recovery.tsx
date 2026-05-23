@@ -21,6 +21,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EngineExplainabilityCard } from "../components/dashboard/EngineExplainabilityCard";
 import { runRecoveryEngine } from '../services/analysisEngine/recoveryEngine';
 
 export function Recovery() {

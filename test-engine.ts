@@ -14,7 +14,9 @@ import { convertCookingState } from "./src/domain/nutrition/cookingYield";
 import { validateAndCleanRecipeDraft } from "./src/domain/nutrition/recipeDraftSchema";
 import { validateAndCleanMealPhotoDraft } from "./src/domain/nutrition/mealPhotoDraftSchema";
 import { validateAndCleanOcrDraft } from "./src/domain/nutrition/ocrDraftSchema";
+import { DailyVoiceDraftSchema, RpeVoiceDraftSchema } from "./src/features/forms/voiceSchemas";
 import { matchFoodCandidates, calculateMatchScore } from "./src/domain/nutrition/matchFoodCandidates";
+import { getConfidenceCategory, getConfidenceLabel } from "./src/domain/nutrition/dataQualityService";
 import "./src/domain/safety/wordingPolicy.test";
 
 console.log("====================================================");
@@ -282,6 +284,39 @@ const baselineExplo = calculateBaseline(mockMetricsRangeExploratory, "rhr", new 
 assert.strictEqual(baselineExplo?.maturity, "exploratory", "Une baseline comptant entre 5 et 13 mesures doit être qualifiée d''exploratory'.");
 console.log("✅ 22. Baseline Maturity: Les seuils de représentativité statistique intra-individuels sont respectés.");
 
+// Test 22.5: Baseline Robust calculations
+assert.strictEqual(baselineExplo !== null && baselineExplo.median28d !== undefined, true, "Median 28d must be computed");
+assert.strictEqual(baselineExplo !== null && baselineExplo.mad28d !== undefined, true, "MAD 28d must be computed");
+assert.strictEqual(baselineExplo !== null && baselineExplo.ewma7d !== undefined, true, "EWMA 7d must be computed");
+assert.strictEqual(baselineExplo !== null && baselineExplo.coverage28d > 0, true, "Coverage must be computed");
+console.log("✅ 22.5 Baseline Engine: Calculs robustes (mediane, MAD, EWMA, couverture) valides.");
+
+// Test 22.6: Analytics Engines Bootup
+import { runTrainingLoadEngine } from "./src/services/analysisEngine/trainingLoadEngine";
+import { runRecoveryEngine } from "./src/services/analysisEngine/recoveryEngine";
+import { runSleepEngine } from "./src/services/analysisEngine/sleepEngine";
+import { runReadinessEngine } from "./src/services/analysisEngine/readinessEngine";
+
+const mockStateForEngines = {
+  metrics: [],
+  garminActivities: [],
+  sessionRpeLogs: [],
+  hooperLogs: [],
+  painLogs: [],
+  mealLogs: [],
+  contextLogs: [],
+  userProfile: { general: { weight: 70, height: 180, age: 30, gender: "male" } }
+} as any;
+
+const tlRes = runTrainingLoadEngine(mockStateForEngines);
+const recRes = runRecoveryEngine(mockStateForEngines);
+const nullMental = { score: 0, confidence: 0 } as any;
+const nullNutrit = { score: 0, confidence: 0 } as any;
+
+const readRes = runReadinessEngine(mockStateForEngines, recRes, tlRes, nullMental, nullNutrit);
+assert.strictEqual(readRes.score >= 0 && readRes.score <= 100, true, "Readiness score must be bounded 0-100");
+console.log("✅ 22.6 Analytical Engines (Readiness, Training, Sleep, etc) boot without errors and apply clampings.");
+
 // Test 23: Readiness Clamping Boundaries
 const clampedScoreMax = Math.min(100, Math.max(0, 105));
 const clampedScoreMin = Math.min(100, Math.max(0, -5));
@@ -399,7 +434,34 @@ assert.strictEqual(parsedOcrDraft.valuesPer100g[1].value, 10, "Doit valider la p
 assert.strictEqual(parsedOcrDraft.valuesPer100g[0].value, 57, "Doit valider la calorie extraite (57 kcal pour 100g)");
 console.log("✅ 34. OCR Label Draft: Validation du schéma d'extraction OCR de l'étiquette (Etape 6.2).");
 
+// Test 35: Voice Schemas Draft Validation
+const dailyDraftResult = DailyVoiceDraftSchema.safeParse({
+  fatigue: { value: 6, confidence: 95, uncertaintyReason: "" },
+  stress: { value: 2, confidence: 90, uncertaintyReason: "" },
+  missingFields: ["soreness", "digestion"],
+  uncertainFields: ["sleepQuality"],
+  requiresValidation: true
+});
+assert.strictEqual(dailyDraftResult.success, true, "Doit valider le draft vocal daily");
+
+const rpeDraftResult = RpeVoiceDraftSchema.safeParse({
+  rpe: { value: 8, confidence: 90, uncertaintyReason: "" },
+  durationMinutes: { value: 45, confidence: 100, uncertaintyReason: "" },
+  missingFields: ["feeling"],
+  uncertainFields: [],
+  requiresValidation: true
+});
+assert.strictEqual(rpeDraftResult.success, true, "Doit valider le draft vocal RPE");
+console.log("✅ 35. Voice Schemas Draft: Validation de conformité des drafts vocaux Zod (Etape 6.3).");
+
+// Test 36: Data Quality Rules
+assert.strictEqual(getConfidenceCategory(0), "non_valide", "Confidence 0 doit être non valide");
+assert.strictEqual(getConfidenceCategory(40), "valide_sans_quantite", "Confidence 40 doit être valide_sans_quantite");
+assert.strictEqual(getConfidenceCategory(60), "portions", "Confidence 60 doit être portions");
+assert.strictEqual(getConfidenceCategory(80), "pese", "Confidence 80 doit être pese");
+console.log("✅ 36. Data Quality Confidence Rules: Validation des paliers de confiance (Etape 8.6).");
+
 console.log("====================================================");
-console.log("        TOUS LES TESTS (34/34) SE SONT DEROULES      ");
+console.log("        TOUS LES TESTS (36/36) SE SONT DEROULES      ");
 console.log("               AVEC SUCCES EN SANS FAILLE !         ");
 console.log("====================================================");

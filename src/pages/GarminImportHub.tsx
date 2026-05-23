@@ -14,6 +14,7 @@ export function GarminImportHub() {
   
   const [isDragging, setIsDragging] = useState(false);
   const [activeTab, setActiveTab] = useState<GarminImportType>('history');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -30,14 +31,25 @@ export function GarminImportHub() {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processFile(e.dataTransfer.files[0], activeTab);
+      setSelectedFile(e.dataTransfer.files[0]);
     }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      processFile(e.target.files[0], activeTab);
+      setSelectedFile(e.target.files[0]);
     }
+  };
+
+  const confirmImport = () => {
+    if (!selectedFile) return;
+    processFile(selectedFile, activeTab);
+    setSelectedFile(null);
+  };
+
+  const cancelImport = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const processFile = async (file: File, type: GarminImportType) => {
@@ -82,7 +94,49 @@ export function GarminImportHub() {
     processGarminFile(file, type, logId);
   };
 
-  const renderDropZone = (type: GarminImportType, title: string, description: string, icon: React.ReactNode) => (
+  const renderDropZone = (type: GarminImportType, title: string, description: string, icon: React.ReactNode) => {
+    if (selectedFile) {
+      return (
+        <div className="bg-card border border-border rounded-xl p-6 mb-8 animate-fade-in">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 bg-primary/10 text-primary rounded-lg">
+              {icon}
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold">Prévisualisation d'import ({type})</h3>
+              <p className="text-sm text-muted-foreground">Vérifiez les détails avant d'importer les données.</p>
+            </div>
+          </div>
+          
+          <div className="bg-muted/30 border border-border rounded-lg p-4 mb-6 space-y-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Nom du fichier :</span>
+              <span className="font-mono font-medium">{selectedFile.name}</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Taille :</span>
+              <span className="font-mono font-medium">{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Type de données :</span>
+              <span className="font-mono font-medium">{type === 'history' ? 'Historique / ZIP' : type === 'wellness' ? 'Bien-être (Sommeil, VFC)' : 'Activités (CSV/FIT)'}</span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={cancelImport}>
+              Annuler
+            </Button>
+            <Button onClick={confirmImport} className="bg-primary text-primary-foreground min-w-[200px]">
+              <CheckCircle2 size={16} className="mr-2" />
+              Confirmer l'import
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
     <div className="bg-card border border-border rounded-xl p-6 mb-8">
       <div className="flex items-center gap-3 mb-4">
         <div className="p-2 bg-primary/10 text-primary rounded-lg">
@@ -115,7 +169,7 @@ export function GarminImportHub() {
         </Button>
       </div>
     </div>
-  );
+  )};
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -209,6 +263,9 @@ export function GarminImportHub() {
                       <span>{new Date(log.importDate).toLocaleString('fr-FR')}</span>
                       {log.recordsAdded > 0 && (
                         <span>• {log.recordsAdded} éléments ajoutés</span>
+                      )}
+                      {log.recordsIgnored > 0 && (
+                        <span>• {log.recordsIgnored} ignorés (doublons)</span>
                       )}
                       {log.details?.filesProcessed !== undefined && (
                         <span>• {log.details.filesProcessed} fichiers traités</span>

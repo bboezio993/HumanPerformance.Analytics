@@ -76,6 +76,31 @@ export function runSleepEngine(state: AppState): ModularEngineResult {
     limits.push("Évaluation subjective de la nuit manquante.");
   }
 
+  const sleepScoreGarmin = state.metrics.find((m) => m.type === "sleep_score" && m.timestamp.startsWith(todayStr));
+  if (sleepScoreGarmin) {
+    dataUsed.push("sleep_score");
+    // Garmin score is 0-100. We blend it slightly but keep it non-absolute.
+    sleepScore = (sleepScore * 0.7) + (sleepScoreGarmin.value * 0.3);
+    
+    if (sleepScoreGarmin.value < 60) {
+      negativeDrivers.push({
+        metricId: "sleep_score",
+        label: "Efficacité (Garmin)",
+        impact: "negative",
+        value: `${sleepScoreGarmin.value}/100`,
+        note: "Indicateur optique de qualité altéré."
+      });
+    } else if (sleepScoreGarmin.value > 80) {
+      positiveDrivers.push({
+        metricId: "sleep_score",
+        label: "Efficacité (Garmin)",
+        impact: "positive",
+        value: `${sleepScoreGarmin.value}/100`,
+        note: "Bonne récupération estimée par l'appareil."
+      });
+    }
+  }
+
   // Nuance sleep calculations based on context (heat & travel)
   const isTravel = contextResult.negativeDrivers.some(d => d.metricId === "context_travel");
   const isHeat = contextResult.negativeDrivers.some(d => d.metricId === "context_environment");
