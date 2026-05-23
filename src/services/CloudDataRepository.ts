@@ -101,6 +101,29 @@ export interface NutritionDraft {
   confirmedAt?: string;
 }
 
+export interface MediaAsset {
+  id: string;
+  uid: string;
+  storagePath: string;
+  url?: string;
+  contentType: string;
+  size: number;
+  status: "uploaded" | "processing" | "completed" | "deleted" | "failed";
+  reasonForDeletion?: string;
+  createdAt: string;
+}
+
+export interface VoiceDraft {
+  id: string;
+  uid: string;
+  transcript: string;
+  formType: "daily_checkin" | "rpe" | "pain" | "context" | "nutrition";
+  extractedFields: any;
+  confidence: number;
+  status: "draft" | "confirmed" | "rejected" | "expired";
+  createdAt: string;
+}
+
 export interface MigrationStatus {
   uid: string;
   migrationDate: string;
@@ -194,6 +217,34 @@ export const CloudDataRepository: DataRepository = {
       const snap = await getDoc(doc(db, 'users', uid, 'foodProducts', barcode));
       if (snap.exists()) {
         return snap.data();
+      }
+      return null;
+    } catch (e) {
+      handleFirestoreError(e, OperationType.GET, path);
+      return null;
+    }
+  },
+
+  async saveUserFood(food: UserFood): Promise<void> {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const path = `users/${uid}/foods/${food.id}`;
+    try {
+      const clean = Object.fromEntries(Object.entries(food).filter(([_, v]) => v !== undefined));
+      await setDoc(doc(db, 'users', uid, 'foods', food.id), { ...clean, uid }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, path);
+    }
+  },
+
+  async getUserFood(id: string): Promise<UserFood | null> {
+    if (!auth.currentUser) return null;
+    const uid = auth.currentUser.uid;
+    const path = `users/${uid}/foods/${id}`;
+    try {
+      const snap = await getDoc(doc(db, 'users', uid, 'foods', id));
+      if (snap.exists()) {
+        return snap.data() as UserFood;
       }
       return null;
     } catch (e) {
@@ -375,6 +426,29 @@ export const CloudDataRepository: DataRepository = {
     }
   },
 
+  async saveVoiceDraft(draft: VoiceDraft): Promise<void> {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const path = `users/${uid}/voiceDrafts/${draft.id}`;
+    try {
+      const clean = Object.fromEntries(Object.entries(draft).filter(([_, v]) => v !== undefined));
+      await setDoc(doc(db, 'users', uid, 'voiceDrafts', draft.id), { ...clean, uid }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, path);
+    }
+  },
+
+  async deleteVoiceDraft(id: string): Promise<void> {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const path = `users/${uid}/voiceDrafts/${id}`;
+    try {
+      await deleteDoc(doc(db, 'users', uid, 'voiceDrafts', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, path);
+    }
+  },
+
   async saveAiUsageLog(log: AiUsageLog): Promise<void> {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
@@ -384,6 +458,38 @@ export const CloudDataRepository: DataRepository = {
       await setDoc(doc(db, 'users', uid, 'aiUsageLogs', log.id), { ...clean, uid }, { merge: true });
     } catch (e) {
       handleFirestoreError(e, OperationType.WRITE, path);
+    }
+  },
+
+  async saveMediaAsset(asset: MediaAsset): Promise<void> {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const path = `users/${uid}/mediaAssets/${asset.id}`;
+    try {
+      const clean = Object.fromEntries(Object.entries(asset).filter(([_, v]) => v !== undefined));
+      await setDoc(doc(db, 'users', uid, 'mediaAssets', asset.id), { ...clean, uid }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, path);
+    }
+  },
+
+  async deleteMediaAsset(id: string, reason?: string): Promise<void> {
+    if (!auth.currentUser) return;
+    const uid = auth.currentUser.uid;
+    const path = `users/${uid}/mediaAssets/${id}`;
+    try {
+      if (reason) {
+        // Soft delete / mark as deleted to maintain auditing trail according to page 4 specification
+        await setDoc(doc(db, 'users', uid, 'mediaAssets', id), { 
+          status: 'deleted', 
+          reasonForDeletion: reason,
+          deletedAt: new Date().toISOString() 
+        }, { merge: true });
+      } else {
+        await deleteDoc(doc(db, 'users', uid, 'mediaAssets', id));
+      }
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, path);
     }
   },
 

@@ -174,10 +174,43 @@ export function Confidentiality() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">Banque d'activité stockée localement dans IndexedDB</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {user ? `Associé au compte Google : ${user.email}` : "Veuillez vous assurer d'être connecté pour synchroniser vers le Cloud."}
+                  {user ? `Associé au compte de l'athlète : ${user.email}` : "Veuillez vous assurer d'être connecté pour synchroniser vers le Cloud."}
                 </p>
               </div>
             </div>
+
+            {user && (
+              <div className={`p-4 border rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${
+                store.isMigratedToCloud
+                  ? 'border-emerald-500/20 bg-emerald-500/5'
+                  : 'border-amber-500/20 bg-amber-500/5'
+              }`}>
+                <div className="space-y-1">
+                  <span className={`text-[10px] font-bold uppercase tracking-wider block ${
+                    store.isMigratedToCloud ? 'text-emerald-500' : 'text-amber-400'
+                  }`}>
+                    {store.isMigratedToCloud ? '✓ Sauvegarde Cloud Optionnelle Activée' : '⚠ Migration Cloud Recommandée'}
+                  </span>
+                  <p className="text-xs text-muted-foreground leading-snug">
+                    {store.isMigratedToCloud 
+                      ? "Vos données de performance locale (workouts, calories, sommeil) ont été migrées avec succès vers Firestore chiffré."
+                      : "Certaines données résident uniquement sur cet appareil. Migrez-les sur votre serveur privé sécurisé pour ne jamais les perdre."
+                    }
+                  </p>
+                </div>
+                {!store.isMigratedToCloud && (
+                  <Button
+                    size="sm"
+                    className="shrink-0 bg-amber-500 hover:bg-amber-600 text-black font-semibold h-8 text-[11px] font-sans"
+                    onClick={() => {
+                      useStore.setState({ isMigratedToCloud: undefined });
+                    }}
+                  >
+                    Lancer la Migration Cloud 🚀
+                  </Button>
+                )}
+              </div>
+            )}
           </CardContent>
           <CardFooter className="border-t border-border/50 pt-6 flex justify-between">
             <div className="text-xs text-muted-foreground flex items-center gap-1.5 font-mono">

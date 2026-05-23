@@ -1,0 +1,324 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+const { HttpsError } = require("firebase-functions/v2/https");
+const { Type } = require("@google/genai");
+
+/**
+ * Analyse une recette littéraire brute d'athlète et extrait précisément les ingrédients, portions et macros.
+ *
+ * @param {GoogleGenAI} aiClient Client GenAI déjà configuré avec la clé secrète
+ * @param {string} recipeText Texte libre de recette de cuisine
+ * @returns {Promise<object>} Le brouillon RecipeDraft conforme
+ */
+async function parseRecipeText(aiClient, recipeText) {
+  if (!recipeText) {
+    throw new HttpsError("invalid-argument", "Le texte de la recette est requis.");
+  }
+
+  const prompt = `Analyse cette recette de cuisine collée ou dictée par l'athlète et extrait précisément les ingrédients, portions et macro-estimations.
+Recette:
+${recipeText}`;
+
+  const systemInstruction = `Tu es un nutritionniste de haut niveau pour Aura Elite Next.
+Analyse la recette textuelle fournie. Convertis de façon déterministe chaque ingrédient avec son poids théorique en grammes ou volume en ml.
+Associe des indices de confiance (0-100) pour chaque ingrédient.
+Ne propose jamais de diagnostics ou d'opinions médicales. Formule uniquement en grammage nutritionnel.`;
+
+  const response = await aiClient.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: prompt,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING, description: "Nom général de la recette" },
+          ingredients: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                rawText: { type: Type.STRING, description: "Ingrédient brut textuel" },
+                foodName: { type: Type.STRING, description: "Nom d'aliment standardisé en français" },
+                quantity: { type: Type.NUMBER, description: "Quantité numérique extraite" },
+                unit: { type: Type.STRING, description: "Unité (g, ml, pièce, portions...)" },
+                grams: { type: Type.NUMBER, description: "Poids converti en grammes" },
+                confidence: { type: Type.NUMBER, description: "Confiance de 0 à 100" },
+                assumptions: { type: Type.STRING, description: "Densité ou portion supposée" }
+              },
+              required: ["rawText", "foodName", "quantity", "unit", "grams", "confidence", "assumptions"]
+            }
+          },
+          missingMatches: { type: Type.ARRAY, items: { type: Type.STRING } },
+          questionsForUser: { type: Type.ARRAY, items: { type: Type.STRING } },
+          requiresValidation: { type: Type.BOOLEAN }
+        },
+        required: ["name", "ingredients", "missingMatches", "questionsForUser", "requiresValidation"]
+      }
+    }
+  });
+
+  return JSON.parse(response.text || "{}");
+}
+
+/**
+ * Extrait les paramètres physiologiques ou logistiques d'un athlète depuis une dictée vocale.
+ *
+ * @param {GoogleGenAI} aiClient Client GenAI déjà configuré avec la clé secrète
+ * @param {string} transcript Texte libre transcrit de la voix
+ * @param {"daily"|"rpe"|"nutrition"|"pain"} formType Sous-moule de formulaire cible
+ * @returns {Promise<object>} Le brouillon FormDraft correspondant au moule
+ */
+async function parseVoiceForm(aiClient, transcript, formType) {
+  if (!transcript || !formType) {
+    throw new HttpsError("invalid-argument", "Le transcript et le formType sont obligatoires pour la transcription.");
+  }
+
+  const systemInstruction = `Tu es un assistant vocal d'élite pour athlètes Aura Elite.
+Extrais les paramètres physiologiques depuis la dictée vocale de l'utilisateur.
+Utilise rigoureusement le schéma JSON imposé selon le formulaire ${formType}.
+Règles :
+- daily : fatigue (1-7), stress (1-7), sleepQuality (1-7), soreness (1-7), mood (1-7), motivation (1-7), painLevel (0-10), digestion (1-5), appetite (1-5). NE transpose jamais de diagnostic médical ou d'allusions cliniques.
+- rpe : rpe (1-10 échelle de Borg), durationMinutes (durée), feeling (1-5), comment, conformanceToPlan.
+- nutrition : mealType (breakfast, lunch, dinner, snack, pre_workout, intra_workout, post_workout), items d'aliments avec quantité numérique et unité d'ingrédient.
+- pain : localisation de douleur, intensité (0-10), description, facteurs déclencheurs.
+Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFields'.`;
+
+  const schemas = {
+    daily: {
+      type: Type.OBJECT,
+      properties: {
+        fatigue: { type: Type.INTEGER, description: "Fatigue (1 à 7)" },
+        stress: { type: Type.INTEGER, description: "Stress (1 à 7)" },
+        sleepQuality: { type: Type.INTEGER, description: "Qualité sommeil (1 à 7)" },
+        soreness: { type: Type.INTEGER, description: "Courbatures (1 à 7)" },
+        mood: { type: Type.INTEGER, description: "Humeur (1 à 7)" },
+        motivation: { type: Type.INTEGER, description: "Motivation (1 à 7)" },
+        painLevel: { type: Type.INTEGER, description: "Douleur (0 à 10)" },
+        digestion: { type: Type.INTEGER, description: "Digestion (1 à 5)" },
+        appetite: { type: Type.INTEGER, description: "Appétit (1 à 5)" },
+        notes: { type: Type.STRING },
+        missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        requiresValidation: { type: Type.BOOLEAN }
+      },
+      required: ["missingFields", "uncertainFields", "requiresValidation"]
+    },
+    rpe: {
+      type: Type.OBJECT,
+      properties: {
+        rpe: { type: Type.INTEGER, description: "RPE d'effort (1 à 10)" },
+        durationMinutes: { type: Type.INTEGER },
+        feeling: { type: Type.INTEGER, description: "Feeling subjectif (1 à 5)" },
+        comment: { type: Type.STRING },
+        conformanceToPlan: { type: Type.BOOLEAN },
+        missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        requiresValidation: { type: Type.BOOLEAN }
+      },
+      required: ["missingFields", "uncertainFields", "requiresValidation"]
+    },
+    nutrition: {
+      type: Type.OBJECT,
+      properties: {
+        mealType: { type: Type.STRING },
+        items: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              foodName: { type: Type.STRING },
+              quantity: { type: Type.NUMBER },
+              unit: { type: Type.STRING },
+              rawCookedState: { type: Type.STRING },
+              confidence: { type: Type.NUMBER },
+              assumptions: { type: Type.STRING }
+            },
+            required: ["foodName", "quantity", "unit", "confidence", "assumptions"]
+          }
+        },
+        missingQuantities: { type: Type.ARRAY, items: { type: Type.STRING } },
+        uncertainItems: { type: Type.ARRAY, items: { type: Type.STRING } },
+        requiresValidation: { type: Type.BOOLEAN }
+      },
+      required: ["items", "missingQuantities", "uncertainItems", "requiresValidation"]
+    },
+    pain: {
+      type: Type.OBJECT,
+      properties: {
+        localisation: { type: Type.STRING },
+        intensity: { type: Type.INTEGER, description: "Douleur (0 à 10)" },
+        description: { type: Type.STRING },
+        aggravatingFactors: { type: Type.STRING },
+        missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        requiresValidation: { type: Type.BOOLEAN }
+      },
+      required: ["localisation", "intensity", "missingFields", "uncertainFields", "requiresValidation"]
+    }
+  };
+
+  const selectedSchema = schemas[formType] || schemas.daily;
+
+  const response = await aiClient.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: transcript,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: selectedSchema
+    }
+  });
+
+  return JSON.parse(response.text || "{}");
+}
+
+/**
+ * Extrait les valeurs macro-nutritionnelles d'une étiquette par 100g via vision par ordinateur.
+ *
+ * @param {GoogleGenAI} aiClient Client GenAI déjà configuré avec la clé secrète
+ * @param {string} imageBase64 Représentation image complète au format Base64 brut
+ * @returns {Promise<object>} Le brouillon NutritionLabelDraft converti d'après l'OCR
+ */
+async function extractNutritionLabel(aiClient, imageBase64) {
+  if (!imageBase64) {
+    throw new HttpsError("invalid-argument", "L'image base64 de l'étiquette nutritionnelle est requise.");
+  }
+
+  const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+  const imagePart = {
+    inlineData: {
+      mimeType: "image/jpeg",
+      data: cleanBase64
+    }
+  };
+
+  const textPart = {
+    text: "Analyse cette photo de tableau nutritionnel d'aliment et extrais les nutriments POUR 100 G."
+  };
+
+  const systemInstruction = `Tu es un OCR intelligent spécialisé en métabolisme et étiquetage CIQUAL.
+Analyse la photo de l'étiquette et extrais les nutriments standardisés uniquement pour 100 G.
+Donne des indices de confiance (0-100) pour chaque nutriment.
+Ne remplace jamais une valeur illisible par 0, utilise l'argument 'missingReason'.`;
+
+  const response = await aiClient.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: { parts: [imagePart, textPart] },
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          productName: { type: Type.STRING },
+          servingSize: { type: Type.STRING },
+          valuesPer100g: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                nutrientId: { type: Type.STRING, description: "calories, protein, carbs, sugars, fat, saturatedFat, fiber, salt, sodium" },
+                value: { type: Type.NUMBER },
+                unit: { type: Type.STRING },
+                confidence: { type: Type.NUMBER },
+                rawText: { type: Type.STRING },
+                missingReason: { type: Type.STRING }
+              },
+              required: ["nutrientId", "value", "unit", "confidence", "rawText"]
+            }
+          },
+          ingredientsText: { type: Type.STRING },
+          allergensText: { type: Type.STRING },
+          uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+          requiresUserValidation: { type: Type.BOOLEAN }
+        },
+        required: ["valuesPer100g", "uncertainFields", "requiresUserValidation"]
+      }
+    }
+  });
+
+  return JSON.parse(response.text || "{}");
+}
+
+/**
+ * Analyse une photo de repas de l'assiette d'un athlète et conjecture des proportions et types d'ingrédients.
+ *
+ * @param {GoogleGenAI} aiClient Client GenAI déjà configuré avec la clé secrète
+ * @param {string} imageBase64 Représentation d'image intégrale au format Base64 brut
+ * @returns {Promise<object>} Le brouillon MealPhotoDraft issu du scan visuel
+ */
+async function analyzeMealPhoto(aiClient, imageBase64) {
+  if (!imageBase64) {
+    throw new HttpsError("invalid-argument", "L'image de l'assiette repas est impérative.");
+  }
+
+  const cleanBase64 = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+  const imagePart = {
+    inlineData: {
+      mimeType: "image/jpeg",
+      data: cleanBase64
+    }
+  };
+
+  const textPart = {
+    text: "Identifie les aliments probables présents dans cette assiette de manière visuelle, estime leurs poids, portions ou volumes."
+  };
+
+  const systemInstruction = `Tu es un expert en estimation nutritionnelle visuelle pour Aura Elite Next.
+Règles cruciales :
+- Ne prétends jamais livrer des calories ou valeurs exactes indiscutables. Indique clairement qu'il s'agit d'un brouillon ('MealPhotoDraft') soumis à validation requise obligatoire de l'utilisateur.
+- Propose des alternatives intelligentes d'aliments de notre base de données.
+- Liste les incertitudes visuelles : sauce dissimulée, mélange non dissociable, etc.`;
+
+  const response = await aiClient.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: { parts: [imagePart, textPart] },
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          detectedFoods: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                label: { type: Type.STRING, description: "Nom informel français de l'ingrédient" },
+                probableFoodIds: { type: Type.ARRAY, items: { type: Type.STRING }, description: "IDs ou correspondances possibles d'aliments" },
+                visualConfidence: { type: Type.NUMBER, description: "Niveau de certitude de détection" },
+                estimatedQuantityLabel: { type: Type.STRING },
+                quantityConfidence: { type: Type.NUMBER },
+                rawCookedGuess: { type: Type.STRING },
+                needsUserConfirmation: { type: Type.BOOLEAN },
+                uncertaintyNotes: { type: Type.ARRAY, items: { type: Type.STRING } }
+              },
+              required: ["label", "probableFoodIds", "visualConfidence", "estimatedQuantityLabel", "quantityConfidence", "rawCookedGuess", "needsUserConfirmation", "uncertaintyNotes"]
+            }
+          },
+          globalUncertainties: { type: Type.ARRAY, items: { type: Type.STRING } },
+          suggestedQuestions: { type: Type.ARRAY, items: { type: Type.STRING } },
+          modelVersion: { type: Type.STRING },
+          promptVersion: { type: Type.STRING }
+        },
+        required: ["detectedFoods", "globalUncertainties", "suggestedQuestions", "modelVersion", "promptVersion"]
+      }
+    }
+  });
+
+  return JSON.parse(response.text || "{}");
+}
+
+module.exports = {
+  parseRecipeText,
+  parseVoiceForm,
+  extractNutritionLabel,
+  analyzeMealPhoto
+};

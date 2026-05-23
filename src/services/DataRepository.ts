@@ -13,7 +13,7 @@ import {
   GarminActivity,
   GarminImportLog
 } from '../types';
-import { FavoriteFood, AiUsageLog, NutritionDraft, MigrationStatus } from './CloudDataRepository';
+import { FavoriteFood, AiUsageLog, NutritionDraft, MigrationStatus, MediaAsset, VoiceDraft, UserFood } from './CloudDataRepository';
 
 export interface DataRepository {
   saveUserProfile(profile: UserProfile): Promise<void>;
@@ -26,6 +26,9 @@ export interface DataRepository {
   
   saveFoodProduct(foodProduct: any): Promise<void>;
   getFoodProduct(barcode: string): Promise<any | null>;
+  
+  saveUserFood(food: UserFood): Promise<void>;
+  getUserFood(id: string): Promise<UserFood | null>;
   
   saveFavoriteFood(fav: FavoriteFood): Promise<void>;
   deleteFavoriteFood(id: string): Promise<void>;
@@ -43,7 +46,13 @@ export interface DataRepository {
   saveGarminImportLog(log: GarminImportLog): Promise<void>;
   
   saveNutritionDraft(draft: NutritionDraft): Promise<void>;
+  saveVoiceDraft(draft: VoiceDraft): Promise<void>;
+  deleteVoiceDraft(id: string): Promise<void>;
+  
   saveAiUsageLog(log: AiUsageLog): Promise<void>;
+  
+  saveMediaAsset(asset: MediaAsset): Promise<void>;
+  deleteMediaAsset(id: string, reason?: string): Promise<void>;
   
   checkAndIncrementAiQuota(feature: "meal_photo" | "label_ocr" | "recipe_text" | "voice_form"): Promise<{ allowed: boolean; remaining: number }>;
   

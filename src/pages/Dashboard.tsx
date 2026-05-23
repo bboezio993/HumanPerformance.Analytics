@@ -36,7 +36,7 @@ import { TooltipProvider, Tooltip as UITooltip, TooltipContent, TooltipTrigger }
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 
 import { DailyMetrics, AnalysisResult, Recommendation } from '../types';
-import { analyzeHealthData } from '../services/gemini';
+import { analyzeHealthData } from '../services/aiClient';
 import { HooperForm } from '../components/forms/HooperForm';
 import { WeeklyScreeningForm } from '../components/forms/WeeklyScreeningForm';
 import { EngineScoreCard } from '../components/dashboard/EngineScoreCard';

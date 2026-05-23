@@ -14,7 +14,7 @@ import {
   GarminActivity,
   GarminImportLog
 } from '../types';
-import { FavoriteFood, AiUsageLog, NutritionDraft, MigrationStatus } from './CloudDataRepository';
+import { FavoriteFood, AiUsageLog, NutritionDraft, MigrationStatus, MediaAsset, VoiceDraft, UserFood } from './CloudDataRepository';
 
 export const LocalDataRepository: DataRepository = {
   async saveUserProfile(profile: UserProfile): Promise<void> {
@@ -42,6 +42,14 @@ export const LocalDataRepository: DataRepository = {
   },
   
   async getFoodProduct(barcode: string): Promise<any | null> {
+    return null;
+  },
+
+  async saveUserFood(food: UserFood): Promise<void> {
+    // Local persistence is handled by Zustand and IndexedDB automatically
+  },
+
+  async getUserFood(id: string): Promise<UserFood | null> {
     return null;
   },
   
@@ -96,8 +104,24 @@ export const LocalDataRepository: DataRepository = {
   async saveNutritionDraft(draft: NutritionDraft): Promise<void> {
     // Local persistence is handled by Zustand and IndexedDB automatically
   },
+
+  async saveVoiceDraft(draft: VoiceDraft): Promise<void> {
+    // Local persistence is handled by Zustand and IndexedDB automatically
+  },
+
+  async deleteVoiceDraft(id: string): Promise<void> {
+    // Local persistence is handled by Zustand and IndexedDB automatically
+  },
   
   async saveAiUsageLog(log: AiUsageLog): Promise<void> {
+    // Local persistence is handled by Zustand and IndexedDB automatically
+  },
+
+  async saveMediaAsset(asset: MediaAsset): Promise<void> {
+    // Local persistence is handled by Zustand and IndexedDB automatically
+  },
+
+  async deleteMediaAsset(id: string, reason?: string): Promise<void> {
     // Local persistence is handled by Zustand and IndexedDB automatically
   },
   

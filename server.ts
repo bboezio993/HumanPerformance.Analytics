@@ -360,6 +360,85 @@ Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFi
     }
   });
 
+  // API Endpoint: Securised Athletic Reformulation for Readiness
+  app.post("/api/gemini/analyze-health-data", async (req, res) => {
+    try {
+      const { profile, calculatedScores, shortSummary, pedagogicalReformulation } = req.body;
+      if (!profile || !calculatedScores) {
+        return res.status(400).json({ error: "Profil d'athlète et scores requis." });
+      }
+
+      if (!aiClient) {
+        return res.status(500).json({ error: "Clé API Gemini non configurée sur le serveur." });
+      }
+
+      const ip = req.ip || "unknown";
+      if (!checkQuota(ip)) {
+        return res.status(429).json({ error: "Quota journalier d'analyse IA dépassé. Veuillez réessayer demain." });
+      }
+
+      const systemInstruction = `
+        Vous êtes un rédacteur et vulgarisateur sportif de haut niveau pour Aura Elite.
+        Votre unique mission est de reformuler de manière pédagogique, fluide et extrêmement bienveillante les résultats déterminés par notre moteur mathématique interne de physiologie sportive.
+        
+        RÈGLES CRUCIALES :
+        1. Vous ne devez JAMAIS effectuer de calculs mathématiques personnels ni modifier les scores et statuts fournis.
+        2. Respectez scrupuleusement les scores calculés par notre moteur :
+           - Score Readiness de disponibilité : ${calculatedScores.performanceReadiness?.score}
+           - Statut Readiness : ${calculatedScores.performanceReadiness?.status}
+           - Score Récupération : ${calculatedScores.recoveryStatus?.score}
+           - Statut Récupération : ${calculatedScores.recoveryStatus?.status}
+           - Statut Sommeil : ${calculatedScores.sleepHealth?.status}
+        3. Utilisez obligatoirement des formulations prudentes, préventives et non médicales pour décrire les limites et contraintes :
+           - Ne posez jamais de diagnostic.
+           - Parlez de "signaux de surcharge à surveiller", "charge aiguë élevée par rapport à votre historique récent", "adaptation privée ou prudente de la charge recommandée", "douleur déclarée", "disponibilité énergétique possiblement basse".
+        4. Intégrez l'explication contextuelle suivante fournie par l'Explainability Layer :
+           - "${shortSummary}"
+           - "${pedagogicalReformulation}"
+        
+        Rédigez une synthèse claire d'environ 3 à 4 phrases en français dans la propriété "summary".
+      `;
+
+      const prompt = `
+        Profil de l'athlète : ${JSON.stringify(profile)}
+        Résultats physiologiques internes : ${JSON.stringify(calculatedScores)}
+        
+        Produisez l'analyse reformulée au format JSON respectant strictement le schéma.
+      `;
+
+      const response = await aiClient.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          systemInstruction,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              summary: { type: Type.STRING, description: "Synthèse de l'état actuel de récupération." }
+            },
+            required: ["summary"]
+          }
+        }
+      });
+
+      const parsedJSON = JSON.parse(response.text || "{}");
+      res.json({
+        summary: parsedJSON.summary,
+        usageLog: {
+          id: `usage_${Date.now()}`,
+          feature: "reformulation",
+          model: "gemini-3.5-flash",
+          status: "confirmed",
+          createdAt: new Date().toISOString()
+        }
+      });
+    } catch (error) {
+      console.error("[Gemini Health Analysis Engine] Error:", error);
+      res.status(500).json({ error: "Échec d'analyse de la readiness par l'IA" });
+    }
+  });
+
   // API Endpoint: Extract Nutrition Facts Labels from Picture (OCR)
   app.post("/api/gemini/extract-nutrition-label", async (req, res) => {
     try {
