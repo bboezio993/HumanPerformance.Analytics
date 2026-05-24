@@ -106,18 +106,19 @@ function DailyCheckInForm({ onSuccess }: FormProps) {
   const [notes, setNotes] = useState('');
 
   const handleVoiceParsed = (parsed: any) => {
-    if (parsed.fatigue?.value !== undefined) setFatigue(Number(parsed.fatigue.value));
-    if (parsed.stress?.value !== undefined) setStress(Number(parsed.stress.value));
-    if (parsed.sleepQuality?.value !== undefined) setSleep(Number(parsed.sleepQuality.value));
-    if (parsed.soreness?.value !== undefined) setSoreness(Number(parsed.soreness.value));
-    if (parsed.mood?.value !== undefined) setMood(Number(parsed.mood.value));
-    if (parsed.motivation?.value !== undefined) setMotivation(Number(parsed.motivation.value));
-    if (parsed.painLevel?.value !== undefined) setPainLevel(Number(parsed.painLevel.value));
-    if (parsed.digestion?.value !== undefined) setDigestion(Number(parsed.digestion.value));
-    if (parsed.appetite?.value !== undefined) setAppetite(Number(parsed.appetite.value));
-    if (parsed.recovery?.value !== undefined) setRecovery(Number(parsed.recovery.value));
-    if (parsed.isIll?.value !== undefined) setIsIll(Boolean(parsed.isIll.value));
-    if (parsed.notes?.value) setNotes(parsed.notes.value);
+    const getVal = (field: any) => field && typeof field === 'object' && field.value !== undefined ? field.value : field;
+    if (getVal(parsed.fatigue) !== undefined) setFatigue(Number(getVal(parsed.fatigue)));
+    if (getVal(parsed.stress) !== undefined) setStress(Number(getVal(parsed.stress)));
+    if (getVal(parsed.sleepQuality) !== undefined) setSleep(Number(getVal(parsed.sleepQuality)));
+    if (getVal(parsed.soreness) !== undefined) setSoreness(Number(getVal(parsed.soreness)));
+    if (getVal(parsed.mood) !== undefined) setMood(Number(getVal(parsed.mood)));
+    if (getVal(parsed.motivation) !== undefined) setMotivation(Number(getVal(parsed.motivation)));
+    if (getVal(parsed.painLevel) !== undefined) setPainLevel(Number(getVal(parsed.painLevel)));
+    if (getVal(parsed.digestion) !== undefined) setDigestion(Number(getVal(parsed.digestion)));
+    if (getVal(parsed.appetite) !== undefined) setAppetite(Number(getVal(parsed.appetite)));
+    if (getVal(parsed.recovery) !== undefined) setRecovery(Number(getVal(parsed.recovery)));
+    if (getVal(parsed.isIll) !== undefined) setIsIll(Boolean(getVal(parsed.isIll)));
+    if (getVal(parsed.notes)) setNotes(getVal(parsed.notes));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -404,15 +405,16 @@ function PostSessionRPEForm({ onSuccess }: FormProps) {
   const linkedAct = activities.find(a => a.id === actId);
 
   const handleVoiceParsed = (parsed: any) => {
-    if (parsed.rpe?.value !== undefined) setRpe(Number(parsed.rpe.value));
-    if (parsed.muscularLoad?.value !== undefined) setMuscLoad(Number(parsed.muscularLoad.value));
-    if (parsed.cardioLoad?.value !== undefined) setCardioLoad(Number(parsed.cardioLoad.value));
-    if (parsed.painDuring?.value !== undefined) setPainDuring(Boolean(parsed.painDuring.value));
-    if (parsed.painLocation?.value !== undefined) setPainLocation(parsed.painLocation.value);
-    if (parsed.postPainIntensity?.value !== undefined) setPostPain(Number(parsed.postPainIntensity.value));
-    if (parsed.techniqueSensation?.value !== undefined) setTechnique(Number(parsed.techniqueSensation.value));
-    if (parsed.conformanceToPlan?.value !== undefined) setComform(Boolean(parsed.conformanceToPlan.value));
-    if (parsed.comment?.value !== undefined) setComment(parsed.comment.value);
+    const getVal = (field: any) => field && typeof field === 'object' && field.value !== undefined ? field.value : field;
+    if (getVal(parsed.rpe) !== undefined) setRpe(Number(getVal(parsed.rpe)));
+    if (getVal(parsed.muscularLoad) !== undefined) setMuscLoad(Number(getVal(parsed.muscularLoad)));
+    if (getVal(parsed.cardioLoad) !== undefined) setCardioLoad(Number(getVal(parsed.cardioLoad)));
+    if (getVal(parsed.painDuring) !== undefined) setPainDuring(Boolean(getVal(parsed.painDuring)));
+    if (getVal(parsed.painLocation) !== undefined) setPainLocation(getVal(parsed.painLocation));
+    if (getVal(parsed.postPainIntensity) !== undefined) setPostPain(Number(getVal(parsed.postPainIntensity)));
+    if (getVal(parsed.techniqueSensation) !== undefined) setTechnique(Number(getVal(parsed.techniqueSensation)));
+    if (getVal(parsed.conformanceToPlan) !== undefined) setComform(Boolean(getVal(parsed.conformanceToPlan)));
+    if (getVal(parsed.comment) !== undefined) setComment(getVal(parsed.comment));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -619,6 +621,7 @@ function PostSessionRPEForm({ onSuccess }: FormProps) {
 function PainInjuryForm({ onSuccess }: FormProps) {
   const addPainLog = useStore(state => state.addPainLog);
   const [success, setSuccess] = useState(false);
+  const [showVoiceAssistant, setShowVoiceAssistant] = useState(false);
 
   const [location, setLocation] = useState('');
   const [side, setSide] = useState<'left' | 'right' | 'bilateral' | 'none'>('left');
@@ -632,6 +635,14 @@ function PainInjuryForm({ onSuccess }: FormProps) {
   const [relievedBy, setRelievedBy] = useState('');
   const [evolutionTime, setEvolutionTime] = useState('stable');
   const [historyEpisodes, setHistoryEpisodes] = useState('first_occurrence');
+
+  const handleVoiceParsed = (parsed: any) => {
+    const getVal = (field: any) => field && typeof field === 'object' && field.value !== undefined ? field.value : field;
+    if (getVal(parsed.localisation)) setLocation(getVal(parsed.localisation));
+    if (getVal(parsed.intensity) !== undefined) setIntEffort(Number(getVal(parsed.intensity)));
+    if (getVal(parsed.description)) setNotes(getVal(parsed.description));
+    if (getVal(parsed.aggravatingFactors)) setAggravatedBy(getVal(parsed.aggravatingFactors));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -663,13 +674,46 @@ function PainInjuryForm({ onSuccess }: FormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="border-b pb-3 border-border">
-        <h3 className="text-lg font-bold flex items-center gap-2 text-amber-500">
-          <AlertTriangle size={20} />
-          Registre des Douleurs & Signaux Corporels
-        </h3>
-        <p className="text-xs text-muted-foreground">Une surveillance proactive permet de prévenir l'installation d'une gêne physique persistante.</p>
+      <div className="flex items-center justify-between border-b pb-3 border-border">
+        <div>
+          <h3 className="text-lg font-bold flex items-center gap-2 text-amber-500">
+            <AlertTriangle size={20} />
+            Registre des Douleurs & Signaux Corporels
+          </h3>
+          <p className="text-xs text-muted-foreground">Une surveillance proactive permet de prévenir l'installation d'une gêne physique persistante.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setShowVoiceAssistant(!showVoiceAssistant)}
+          className="text-xs font-bold gap-1.5 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 h-8 shrink-0"
+        >
+          <Mic size={13} className="animate-pulse text-amber-500" />
+          Remplir par voix 🎙️
+        </Button>
       </div>
+
+      {showVoiceAssistant && (
+        <div className="p-4 bg-amber-500/[0.03] border border-amber-500/15 rounded-2xl space-y-2 animate-fade-in text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1">
+              <Sparkles size={11} className="animate-spin" />
+              Saisie Vocale Assistée Douleurs
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowVoiceAssistant(false)}
+              className="text-[10px] text-muted-foreground hover:text-foreground underline font-bold"
+            >
+              Fermer ❌
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground leading-normal">
+            Parlez naturellement pour décrire votre doute ("Douleur au niveau du tendon d'Achille droit, qui s'aggrave quand je cours, je dirais intensité 6/10..."). Les entrées du formulaire seront extraites et complétées en temps réel.
+          </p>
+          <VoiceCapture formType="pain" onParsedResult={handleVoiceParsed} />
+        </div>
+      )}
 
       {success ? (
         <div className="text-center text-emerald-500 font-semibold py-6">
@@ -825,6 +869,7 @@ function ContextForm({ onSuccess }: FormProps) {
   const addMetric = useStore(state => state.addMetric);
   const addContextLog = useStore(state => state.addContextLog);
   const [success, setSuccess] = useState(false);
+  const [showVoiceAssistant, setShowVoiceAssistant] = useState(false);
 
   // Checkboxes for various context factors
   const [travel, setTravel] = useState(false);
@@ -840,6 +885,23 @@ function ContextForm({ onSuccess }: FormProps) {
   const [competition, setCompetition] = useState(false);
   const [interruptedNight, setInterruptedNight] = useState(false);
   const [notes, setNotes] = useState('');
+
+  const handleVoiceParsed = (parsed: any) => {
+    const getVal = (field: any) => field && typeof field === 'object' && field.value !== undefined ? field.value : field;
+    if (getVal(parsed.travel) !== undefined) setTravel(Boolean(getVal(parsed.travel)));
+    if (getVal(parsed.jetlag) !== undefined) setJetlag(Boolean(getVal(parsed.jetlag)));
+    if (getVal(parsed.alcohol) !== undefined) setAlcohol(Boolean(getVal(parsed.alcohol)));
+    if (getVal(parsed.lateMeal) !== undefined) setLateMeal(Boolean(getVal(parsed.lateMeal)));
+    if (getVal(parsed.heat) !== undefined) setHeat(Boolean(getVal(parsed.heat)));
+    if (getVal(parsed.altitude) !== undefined) setAltitude(Boolean(getVal(parsed.altitude)));
+    if (getVal(parsed.stressEx) !== undefined) setStressEx(Boolean(getVal(parsed.stressEx)));
+    if (getVal(parsed.exams) !== undefined) setExams(Boolean(getVal(parsed.exams)));
+    if (getVal(parsed.meds) !== undefined) setMeds(Boolean(getVal(parsed.meds)));
+    if (getVal(parsed.cycle) !== undefined) setCycle(Boolean(getVal(parsed.cycle)));
+    if (getVal(parsed.competition) !== undefined) setCompetition(Boolean(getVal(parsed.competition)));
+    if (getVal(parsed.interruptedNight) !== undefined) setInterruptedNight(Boolean(getVal(parsed.interruptedNight)));
+    if (getVal(parsed.notes)) setNotes(getVal(parsed.notes));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -882,10 +944,43 @@ function ContextForm({ onSuccess }: FormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="border-b pb-3 border-border">
-        <h3 className="text-lg font-bold">Contexte de Vie & Facteurs Perturbateurs</h3>
-        <p className="text-xs text-muted-foreground">Expliquez les baisses subites de HRV, d'efficacité du sommeil ou d'élévation cardiaque.</p>
+      <div className="flex items-center justify-between border-b pb-3 border-border">
+        <div>
+          <h3 className="text-lg font-bold">Contexte de Vie & Facteurs Perturbateurs</h3>
+          <p className="text-xs text-muted-foreground">Expliquez les baisses subites de HRV, d'efficacité du sommeil ou d'élévation cardiaque.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setShowVoiceAssistant(!showVoiceAssistant)}
+          className="text-xs font-bold gap-1.5 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 text-amber-500 h-8 shrink-0"
+        >
+          <Mic size={13} className="animate-pulse text-amber-500" />
+          Remplir par voix 🎙️
+        </Button>
       </div>
+
+      {showVoiceAssistant && (
+        <div className="p-4 bg-amber-500/[0.03] border border-amber-500/15 rounded-2xl space-y-2 animate-fade-in text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-1">
+              <Sparkles size={11} className="animate-spin" />
+              Saisie Vocale Assistée Contexte
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowVoiceAssistant(false)}
+              className="text-[10px] text-muted-foreground hover:text-foreground underline font-bold"
+            >
+              Fermer ❌
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground leading-normal">
+            Parlez naturellement ("J'ai très mal dormi, je suis en décalage horaire et j'ai bu deux bières à un repas tardif"). Les cases vont se cocher automatiquement.
+          </p>
+          <VoiceCapture formType="context" onParsedResult={handleVoiceParsed} />
+        </div>
+      )}
 
       {success ? (
         <div className="text-center text-emerald-500 font-semibold py-6">

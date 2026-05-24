@@ -6,8 +6,7 @@
 import React, { useState, useEffect } from "react";
 import { useStore } from "../store/useStore";
 import { useAuth } from "../components/FirebaseProvider";
-import { db } from "../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { RepositoryProvider } from "../services/RepositoryProvider";
 import { CloudFunctionsGateway } from "../services/cloudFunctionsGateway";
 import { validateAndCleanRecipeDraft } from "../domain/nutrition/recipeDraftSchema";
 import { matchFoodCandidates, FoodCandidate } from "../domain/nutrition/matchFoodCandidates";
@@ -43,6 +42,7 @@ export function RecipeTextImport({ onAddMealItem }: { onAddMealItem: (item: any)
   const [missingMatches, setMissingMatches] = useState<string[]>([]);
   const [questionsForUser, setQuestionsForUser] = useState<string[]>([]);
   const [success, setSuccess] = useState(false);
+  const [draftId, setDraftId] = useState<string | undefined>(undefined);
 
   // Recipe confirmations metrics
   const [numberOfPortions, setNumberOfPortions] = useState<number>(1);
@@ -65,9 +65,30 @@ export function RecipeTextImport({ onAddMealItem }: { onAddMealItem: (item: any)
       // Pass through Zod layer for compliance (P5.1/P5.2)
       const cleanDraft = validateAndCleanRecipeDraft(parsedData);
       
+      let draftId;
+      if (user) {
+        draftId = `draft_recipe_${Date.now()}`;
+        try {
+          await RepositoryProvider.getRepository().saveNutritionDraft({
+            id: draftId,
+            uid: user.uid,
+            sourceType: "recipe_text_ai",
+            sourceRef: "text_import",
+            extractedJson: cleanDraft,
+            confidence: 85,
+            status: "draft",
+            createdAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn("Recipe Draft persistence failed", e);
+        }
+      }
+
       setDraftName(cleanDraft.name);
       setMissingMatches(cleanDraft.missingMatches);
       setQuestionsForUser(cleanDraft.questionsForUser);
+      // NOTE: Using a state variable or attaching draftId to state to finalize it later
+      setDraftId(draftId);
 
       // Pre-match candidates immediately on load (P5.4)
       const enrichIngredients = cleanDraft.ingredients.map((ing) => {
@@ -114,8 +135,7 @@ export function RecipeTextImport({ onAddMealItem }: { onAddMealItem: (item: any)
       // If uid available, write aiUsageLogs in Firestore to document cost
       if (user && parsedData.usageLog) {
         try {
-          const usageDoc = doc(db, "users", user.uid, "aiUsageLogs", parsedData.usageLog.id);
-          await setDoc(usageDoc, { ...parsedData.usageLog, uid: user.uid });
+          await RepositoryProvider.getRepository().saveAiUsageLog({ ...parsedData.usageLog, uid: user.uid });
         } catch (fsErr) {
           console.warn("[Firestore] AI Usage logs write skipped:", fsErr);
         }
@@ -217,7 +237,7 @@ export function RecipeTextImport({ onAddMealItem }: { onAddMealItem: (item: any)
   };
 
   // Save official Recipe and push to MealLogger composed items
-  const handleConfirmRecipeDraft = () => {
+  const handleConfirmRecipeDraft = async () => {
     if (editedIngredients.length === 0 || !draftName.trim()) return;
 
     const finalRecipeId = `recipe_draft_${Date.now()}`;
@@ -253,6 +273,24 @@ export function RecipeTextImport({ onAddMealItem }: { onAddMealItem: (item: any)
 
     // Commit changes to local state storage
     store.addRecipe(officialRecipe);
+
+    if (user && draftId) {
+      try {
+        await RepositoryProvider.getRepository().saveNutritionDraft({
+            id: draftId,
+            uid: user.uid,
+            sourceType: "recipe_text_ai",
+            sourceRef: "text_import",
+            extractedJson: { recipe: officialRecipe },
+            confidence: 95,
+            status: "confirmed",
+            userCorrections: editedIngredients,
+            createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn("Failed to mark recipe draft as confirmed", e);
+      }
+    }
 
     // 2. Resolve exactly one portion of the new recipe as a Meal item inside the current composed logger meal logs
     onAddMealItem({

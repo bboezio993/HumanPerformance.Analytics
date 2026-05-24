@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { useAuth } from '../components/FirebaseProvider';
-import { db } from '../firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { RepositoryProvider } from '../services/RepositoryProvider';
 import { CloudFunctionsGateway } from '../services/cloudFunctionsGateway';
 import { 
   Mic, 
@@ -146,12 +145,31 @@ export function VoiceCapture({ formType, onParsedResult, onClose }: VoiceCapture
 
     try {
       const data = await CloudFunctionsGateway.generateAiInsights('voice', { transcript, formType });
-      setAiDraft(data);
+      
+      let draftId;
+      if (user) {
+        draftId = `draft_voice_${Date.now()}`;
+        try {
+          await RepositoryProvider.getRepository().saveVoiceDraft({
+            id: draftId,
+            uid: user.uid,
+            transcript: transcript,
+            formType: formType === 'daily' ? 'daily_checkin' : formType as any,
+            extractedFields: data,
+            confidence: 85,
+            status: "draft",
+            createdAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn("Voice Draft persistence failed", e);
+        }
+      }
+
+      setAiDraft({ ...data, draftId });
 
       if (user && data.usageLog) {
         try {
-          const usageDoc = doc(db, 'users', user.uid, 'aiUsageLogs', data.usageLog.id);
-          await setDoc(usageDoc, { ...data.usageLog, uid: user.uid });
+          await RepositoryProvider.getRepository().saveAiUsageLog({ ...data.usageLog, uid: user.uid });
         } catch (fsErr) {
           console.warn("Firestore usage log write skipped:", fsErr);
         }
@@ -164,8 +182,26 @@ export function VoiceCapture({ formType, onParsedResult, onClose }: VoiceCapture
     }
   };
 
-  const handleValidateDraft = () => {
+  const handleValidateDraft = async () => {
     if (!aiDraft) return;
+    
+    if (user && aiDraft.draftId) {
+      try {
+        await RepositoryProvider.getRepository().saveVoiceDraft({
+            id: aiDraft.draftId,
+            uid: user.uid,
+            transcript: transcript,
+            formType: formType === 'daily' ? 'daily_checkin' : formType as any,
+            extractedFields: aiDraft,
+            confidence: 85,
+            status: "confirmed",
+            createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn("Failed to update voice draft as confirmed", e);
+      }
+    }
+
     // Map extracted AI items to properties
     onParsedResult(aiDraft);
     if (onClose) onClose();
@@ -298,83 +334,101 @@ export function VoiceCapture({ formType, onParsedResult, onClose }: VoiceCapture
             {/* Displaying extracted parameters beautifully depending on formType */}
             {formType === 'daily' && (
               <div className="col-span-2 space-y-2 p-3 bg-secondary/20 rounded-xl border border-secondary border-t-2 border-t-emerald-500 grid grid-cols-2 gap-2">
-                {aiDraft.fatigue?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.fatigue.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Fatigue:</span>
-                    <span className={`font-mono font-bold ${aiDraft.fatigue.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.fatigue.value}/7</span>
-                  </div>
-                )}
-                {aiDraft.stress?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.stress.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Stress:</span>
-                    <span className={`font-mono font-bold ${aiDraft.stress.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.stress.value}/7</span>
-                  </div>
-                )}
-                {aiDraft.sleepQuality?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.sleepQuality.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Sommeil:</span>
-                    <span className={`font-mono font-bold ${aiDraft.sleepQuality.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.sleepQuality.value}/7</span>
-                  </div>
-                )}
-                {aiDraft.soreness?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.soreness.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Courbatures:</span>
-                    <span className={`font-mono font-bold ${aiDraft.soreness.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.soreness.value}/7</span>
-                  </div>
-                )}
-                {aiDraft.mood?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.mood.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Humeur:</span>
-                    <span className={`font-mono font-bold ${aiDraft.mood.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.mood.value}/7</span>
-                  </div>
-                )}
-                {aiDraft.motivation?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.motivation.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Motivation:</span>
-                    <span className={`font-mono font-bold ${aiDraft.motivation.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.motivation.value}/7</span>
-                  </div>
-                )}
-                {aiDraft.painLevel?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.painLevel.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Douleurs:</span>
-                    <span className={`font-mono font-bold ${aiDraft.painLevel.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.painLevel.value}/10</span>
-                  </div>
-                )}
-                {aiDraft.digestion?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.digestion.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Digestion:</span>
-                    <span className={`font-mono font-bold ${aiDraft.digestion.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.digestion.value}/5</span>
-                  </div>
-                )}
+                {(() => {
+                  const getVal = (f: any) => f && typeof f === 'object' && f.value !== undefined ? f.value : f;
+                  const getConf = (f: any) => f && typeof f === 'object' && f.confidence !== undefined ? f.confidence : 100;
+                  const getUncertainty = (f: any) => f && typeof f === 'object' && f.uncertaintyReason ? f.uncertaintyReason : undefined;
+                  return (
+                    <>
+                      {aiDraft.fatigue !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.fatigue)}>
+                          <span className="text-muted-foreground text-[10px]">Fatigue:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.fatigue) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.fatigue)}/7</span>
+                        </div>
+                      )}
+                      {aiDraft.stress !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.stress)}>
+                          <span className="text-muted-foreground text-[10px]">Stress:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.stress) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.stress)}/7</span>
+                        </div>
+                      )}
+                      {aiDraft.sleepQuality !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.sleepQuality)}>
+                          <span className="text-muted-foreground text-[10px]">Sommeil:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.sleepQuality) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.sleepQuality)}/7</span>
+                        </div>
+                      )}
+                      {aiDraft.soreness !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.soreness)}>
+                          <span className="text-muted-foreground text-[10px]">Courbatures:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.soreness) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.soreness)}/7</span>
+                        </div>
+                      )}
+                      {aiDraft.mood !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.mood)}>
+                          <span className="text-muted-foreground text-[10px]">Humeur:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.mood) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.mood)}/7</span>
+                        </div>
+                      )}
+                      {aiDraft.motivation !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.motivation)}>
+                          <span className="text-muted-foreground text-[10px]">Motivation:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.motivation) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.motivation)}/7</span>
+                        </div>
+                      )}
+                      {aiDraft.painLevel !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.painLevel)}>
+                          <span className="text-muted-foreground text-[10px]">Douleurs:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.painLevel) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.painLevel)}/10</span>
+                        </div>
+                      )}
+                      {aiDraft.digestion !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.digestion)}>
+                          <span className="text-muted-foreground text-[10px]">Digestion:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.digestion) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.digestion)}/5</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 
             {formType === 'rpe' && (
               <div className="col-span-2 space-y-2 p-3 bg-secondary/20 rounded-xl border border-secondary border-t-2 border-t-emerald-500 grid grid-cols-2 gap-2">
-                {aiDraft.rpe?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.rpe.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">RPE Borg:</span>
-                    <span className={`font-mono font-bold ${aiDraft.rpe.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.rpe.value}/10</span>
-                  </div>
-                )}
-                {aiDraft.durationMinutes?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.durationMinutes.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Durée:</span>
-                    <span className={`font-mono font-bold ${aiDraft.durationMinutes.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.durationMinutes.value} min</span>
-                  </div>
-                )}
-                {aiDraft.feeling?.value !== undefined && (
-                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={aiDraft.feeling.uncertaintyReason}>
-                    <span className="text-muted-foreground text-[10px]">Feeling:</span>
-                    <span className={`font-mono font-bold ${aiDraft.feeling.confidence < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{aiDraft.feeling.value}/5</span>
-                  </div>
-                )}
-                {aiDraft.comment?.value && (
-                  <div className="col-span-2 p-1 px-2 bg-background border rounded text-left">
-                    <span className="text-muted-foreground text-[9px] block">Commentaire:</span>
-                    <p className="text-[11px] text-foreground font-sans italic">{aiDraft.comment.value}</p>
-                  </div>
-                )}
+                {(() => {
+                  const getVal = (f: any) => f && typeof f === 'object' && f.value !== undefined ? f.value : f;
+                  const getConf = (f: any) => f && typeof f === 'object' && f.confidence !== undefined ? f.confidence : 100;
+                  const getUncertainty = (f: any) => f && typeof f === 'object' && f.uncertaintyReason ? f.uncertaintyReason : undefined;
+                  return (
+                    <>
+                      {aiDraft.rpe !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.rpe)}>
+                          <span className="text-muted-foreground text-[10px]">RPE Borg:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.rpe) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.rpe)}/10</span>
+                        </div>
+                      )}
+                      {aiDraft.durationMinutes !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.durationMinutes)}>
+                          <span className="text-muted-foreground text-[10px]">Durée:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.durationMinutes) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.durationMinutes)} min</span>
+                        </div>
+                      )}
+                      {aiDraft.feeling !== undefined && (
+                        <div className="p-1 px-2 bg-background border rounded flex justify-between items-center" title={getUncertainty(aiDraft.feeling)}>
+                          <span className="text-muted-foreground text-[10px]">Feeling:</span>
+                          <span className={`font-mono font-bold ${getConf(aiDraft.feeling) < 50 ? 'text-amber-500' : 'text-emerald-500'}`}>{getVal(aiDraft.feeling)}/5</span>
+                        </div>
+                      )}
+                      {aiDraft.comment && (
+                        <div className="col-span-2 p-1 px-2 bg-background border rounded text-left">
+                          <span className="text-muted-foreground text-[9px] block">Commentaire:</span>
+                          <p className="text-[11px] text-foreground font-sans italic">{getVal(aiDraft.comment)}</p>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 
@@ -387,6 +441,37 @@ export function VoiceCapture({ formType, onParsedResult, onClose }: VoiceCapture
                     <span className="font-mono text-emerald-500">{item.quantity} {item.unit}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {formType === 'pain' && (
+              <div className="col-span-2 space-y-2 p-3 bg-secondary/20 rounded-xl border border-secondary border-t-2 border-t-emerald-500 grid grid-cols-2 gap-2">
+                {aiDraft.localisation && (
+                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center">
+                    <span className="text-muted-foreground text-[10px]">Localisation:</span>
+                    <span className="font-bold text-[11px]">{typeof aiDraft.localisation === 'object' ? aiDraft.localisation.value : aiDraft.localisation}</span>
+                  </div>
+                )}
+                {aiDraft.intensity !== undefined && (
+                  <div className="p-1 px-2 bg-background border rounded flex justify-between items-center">
+                    <span className="text-muted-foreground text-[10px]">Intensité:</span>
+                    <span className="font-mono font-bold text-red-500">{typeof aiDraft.intensity === 'object' ? aiDraft.intensity.value : aiDraft.intensity}/10</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {formType === 'context' && (
+              <div className="col-span-2 space-y-2 p-3 bg-secondary/20 rounded-xl border border-secondary border-t-2 border-t-emerald-500 flex flex-wrap gap-2">
+                {Object.entries(aiDraft).map(([k, v]: [string, any]) => {
+                  if (v && typeof v === 'object' && v.value === true) {
+                    return <Badge key={k} variant="secondary" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">{k}</Badge>;
+                  }
+                  if (v === true && k !== 'requiresValidation') {
+                    return <Badge key={k} variant="secondary" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20">{k}</Badge>;
+                  }
+                  return null;
+                })}
               </div>
             )}
           </div>

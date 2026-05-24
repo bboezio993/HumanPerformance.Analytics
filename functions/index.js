@@ -29,7 +29,8 @@ const {
   parseRecipeText,
   parseVoiceForm,
   extractNutritionLabel,
-  analyzeMealPhoto
+  analyzeMealPhoto,
+  analyzeHealthData
 } = require("./src/ai");
 
 /**
@@ -172,6 +173,31 @@ exports.analyzeMealPhoto = authenticatedCallable({ secrets: [geminiApiKeySecret]
   });
 
   return { draft, log };
+});
+
+/**
+ * 6. analyzeHealthData
+ * Generates pedagogical reformulation of health data.
+ */
+exports.analyzeHealthData = authenticatedCallable({ secrets: [geminiApiKeySecret] }, async (request, uid) => {
+  const { profile, calculatedScores, shortSummary, pedagogicalReformulation } = request.data;
+  const quota = await checkAndIncrementQuota(uid, "reformulation");
+  if (!quota.allowed) {
+    throw new HttpsError("resource-exhausted", "Quota d'analyse de santé atteint pour aujourd'hui.");
+  }
+
+  const aiClient = getAiClient();
+  const result = await analyzeHealthData(aiClient, profile, calculatedScores, shortSummary, pedagogicalReformulation);
+
+  const log = await recordAiUsage(uid, {
+    feature: "reformulation",
+    model: "gemini-3.5-flash",
+    inputHash: uid + "_" + Date.now(),
+    cached: false,
+    status: "confirmed"
+  });
+
+  return { summary: result.summary, log };
 });
 
 /**

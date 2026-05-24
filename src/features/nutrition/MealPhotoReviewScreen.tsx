@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { MealPhotoDraftType } from "../../domain/nutrition/mealPhotoDraftSchema";
+import { MealPhotoDraft } from "../../domain/nutrition/mealPhotoDraftSchema";
 import { FoodCandidate } from "../../domain/nutrition/matchFoodCandidates";
 import { internalFoodDatabase } from "../../domain/nutrition/foodDatabase";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,7 @@ interface EditedFoodItem {
 }
 
 interface MealPhotoReviewScreenProps {
-  analysisResult: MealPhotoDraftType;
+  analysisResult: MealPhotoDraft;
   initialEditedFoods: EditedFoodItem[];
   onConfirm: (foods: EditedFoodItem[], keepPhoto: boolean) => void;
   onCancel: () => void;

@@ -5,8 +5,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { useAuth } from "../components/FirebaseProvider";
-import { db } from "../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { RepositoryProvider } from "../services/RepositoryProvider";
 import { CloudFunctionsGateway } from "../services/cloudFunctionsGateway";
 import { validateAndCleanMealPhotoDraft, DetectedFoodItem } from "../domain/nutrition/mealPhotoDraftSchema";
 import { matchFoodCandidates, FoodCandidate } from "../domain/nutrition/matchFoodCandidates";
@@ -21,6 +20,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { MealPhotoReviewScreen } from "../features/nutrition/MealPhotoReviewScreen";
 import { saveMediaAsset, deleteMediaAsset } from "../services/repository/mediaAssetRepository";
+import { compressImage } from "../utils/imageUtils";
+import { StorageService } from "../services/storageService";
 
 export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any) => void }) {
   const { user } = useAuth();
@@ -42,32 +43,45 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const b64 = reader.result as string;
-      setImageSrc(b64);
-      setAnalysisResult(null);
-      setError(null);
-      setEditedFoods([]);
+    
+    setLoading(true); // show loading state while compression and upload happens
+    
+    try {
+      const originalFile = files[0];
+      const compressedBlob = await compressImage(originalFile, 1600, 0.8);
+      const fileToUpload = new File([compressedBlob], originalFile.name, { type: 'image/jpeg' });
       
       const newPhotoId = `photo_${Date.now()}`;
       setPhotoId(newPhotoId);
-
-      // Create a temporary mediaAsset for tracking
+      
       if (user) {
-        try {
-          await saveMediaAsset(user.uid, {
-            id: newPhotoId,
-            url: b64.substring(0, 50) + "...", // pseudo upload URL
-            status: "uploaded",
-            sourceType: "meal_photo",
-          });
-        } catch (err) {
-          console.error("Failed to save mediaAsset marker", err);
-        }
+        const storagePath = `users/${user.uid}/photos/meals/${newPhotoId}.jpg`;
+        const uploadResult = await StorageService.uploadFile(fileToUpload, storagePath);
+        
+        await saveMediaAsset(user.uid, {
+          id: newPhotoId,
+          url: uploadResult.url,
+          status: "uploaded",
+          sourceType: "meal_photo",
+          storagePath: storagePath
+        });
+        
+        // Convert to base64 for Cloud UI preview and Gateway usage
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImageSrc(reader.result as string);
+          setAnalysisResult(null);
+          setError(null);
+          setEditedFoods([]);
+        };
+        reader.readAsDataURL(fileToUpload);
       }
-    };
-    reader.readAsDataURL(files[0]);
+    } catch (err) {
+      console.error("Upload error", err);
+      setError("Erreur lors de l'envoi de l'image.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUploadClick = () => {
@@ -83,7 +97,27 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
       const rawData = await CloudFunctionsGateway.generateAiInsights("meal_photo", { imageBase64: imageSrc });
       
       const validatedDraft = validateAndCleanMealPhotoDraft(rawData);
-      setAnalysisResult(validatedDraft);
+      
+      let draftId;
+      if (user && photoId) {
+        draftId = `draft_meal_${Date.now()}`;
+        try {
+          await RepositoryProvider.getRepository().saveNutritionDraft({
+            id: draftId,
+            uid: user.uid,
+            sourceType: "meal_photo_ai",
+            sourceRef: photoId,
+            extractedJson: validatedDraft,
+            confidence: (validatedDraft as any).overallConfidence || 85,
+            status: "draft",
+            createdAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn("Draft persistence failed", e);
+        }
+      }
+
+      setAnalysisResult({ ...validatedDraft, draftId });
 
       const enriched = validatedDraft.detectedFoods.map(food => {
         let parsedGrams = 100;
@@ -109,8 +143,7 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
 
       if (user && rawData.usageLog) {
         try {
-          const usageDoc = doc(db, "users", user.uid, "aiUsageLogs", rawData.usageLog.id);
-          await setDoc(usageDoc, { ...rawData.usageLog, uid: user.uid });
+          await RepositoryProvider.getRepository().saveAiUsageLog({ ...rawData.usageLog, uid: user.uid });
         } catch (fsErr) {
           console.warn("[Firestore] Skipping logging of usage telemetry:", fsErr);
         }
@@ -169,6 +202,25 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
         await deleteMediaAsset(user.uid, photoId, "User elected not to retain photo after analysis.");
       } catch (err) {
         console.warn("Failed to delete media asset:", err);
+      }
+    }
+
+    // Confirme le draft
+    if (user && analysisResult?.draftId) {
+      try {
+        await RepositoryProvider.getRepository().saveNutritionDraft({
+            id: analysisResult.draftId,
+            uid: user.uid,
+            sourceType: "meal_photo_ai",
+            sourceRef: photoId || "",
+            extractedJson: analysisResult,
+            confidence: (analysisResult as any).overallConfidence || 85,
+            status: "confirmed",
+            userCorrections: foods,
+            createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn("Failed to mark draft as confirmed", e);
       }
     }
 

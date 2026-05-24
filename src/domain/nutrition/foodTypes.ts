@@ -76,7 +76,7 @@ export interface MealItem {
   nutritionVersion?: string;
   missingNutrients?: string[];
 
-  sourceType?: "food" | "recipe";
+  sourceType?: "food" | "recipe" | "label_ocr" | "meal_photo" | "voice" | string;
   recipeId?: string;
   recipeServingCount?: number;
   recipeServingWeightGrams?: number;

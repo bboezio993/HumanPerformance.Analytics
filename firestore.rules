@@ -214,6 +214,32 @@ service cloud.firestore {
              (!('errors' in data) || data.errors is list);
     }
 
+    function isValidVoiceDraft(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.status is string && data.status in ["draft", "confirmed", "rejected", "expired"] &&
+             data.formType is string &&
+             data.transcript is string &&
+             data.createdAt is string;
+    }
+
+    function isValidMediaAsset(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.status is string && data.status in ["uploaded", "deleted", "processing"] &&
+             data.storagePath is string &&
+             data.createdAt is string;
+    }
+
+    function isValidUserFood(data) {
+      return data.uid is string &&
+             data.id is string && data.id.size() < 200 &&
+             data.name is string && data.name.size() < 300 &&
+             data.baseUnit is string &&
+             data.macrosPerBaseUnit is map &&
+             data.createdAt is string;
+    }
+
     // ===============================================================
     // Nested User-Specific Collections Layout (/users/{userId}/...)
     // ===============================================================
@@ -320,6 +346,24 @@ service cloud.firestore {
       match /nutritionDrafts/{draftId} {
         allow read: if isOwner(userId);
         allow create, update: if isOwner(userId) && isValidNutritionDraft(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /voiceDrafts/{draftId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidVoiceDraft(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /mediaAssets/{mediaId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidMediaAsset(request.resource.data);
+        allow delete: if isOwner(userId);
+      }
+
+      match /foods/{foodId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId) && isValidUserFood(request.resource.data);
         allow delete: if isOwner(userId);
       }
 

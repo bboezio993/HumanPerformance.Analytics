@@ -10,10 +10,20 @@ export function SourcesQualityPage() {
   // Confidence & Sources breakdown
   const today = new Date().toISOString().split('T')[0];
   
+  const aiDraftsCount = mealLogs.reduce((acc, currentLog) => {
+    return acc + currentLog.items.filter(item => 
+      item.sourceType?.includes('ai') || 
+      item.sourceType?.includes('vision') || 
+      item.sourceType === 'label_ocr' || 
+      item.sourceType === 'meal_photo' || 
+      item.sourceType === 'recipe'
+    ).length;
+  }, 0);
+
   const sourcesBreakdown = {
     garmin: garminActivities.length + metrics.filter(m => m.source === 'garmin').length,
     manual: hooperLogs.length + garminImportLogs.length, // approximation
-    aiDrafts: mealLogs.filter(m => m.sourceType?.includes('ai') || m.sourceType?.includes('vision') || m.sourceType === 'label_ocr').length,
+    aiDrafts: aiDraftsCount,
   };
 
   const totalPoints = sourcesBreakdown.garmin + sourcesBreakdown.manual + sourcesBreakdown.aiDrafts;

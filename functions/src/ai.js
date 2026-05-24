@@ -86,6 +86,7 @@ Règles :
 - rpe : rpe (1-10 échelle de Borg), durationMinutes (durée), feeling (1-5), comment, conformanceToPlan.
 - nutrition : mealType (breakfast, lunch, dinner, snack, pre_workout, intra_workout, post_workout), items d'aliments avec quantité numérique et unité d'ingrédient.
 - pain : localisation de douleur, intensité (0-10), description, facteurs déclencheurs.
+- context : booléens pour voyage, décalage horaire, alcool, chaleur, repas tardif, altitude, stress, examens, etc.
 Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFields'.`;
 
   const schemas = {
@@ -159,6 +160,28 @@ Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFi
         requiresValidation: { type: Type.BOOLEAN }
       },
       required: ["localisation", "intensity", "missingFields", "uncertainFields", "requiresValidation"]
+    },
+    context: {
+      type: Type.OBJECT,
+      properties: {
+        travel: { type: Type.BOOLEAN, description: "Voyage récent" },
+        jetlag: { type: Type.BOOLEAN, description: "Décalage horaire" },
+        alcohol: { type: Type.BOOLEAN, description: "Consommation alcool" },
+        lateMeal: { type: Type.BOOLEAN, description: "Repas tardif" },
+        heat: { type: Type.BOOLEAN, description: "Chaleur excessive" },
+        altitude: { type: Type.BOOLEAN, description: "Altitude ressentie" },
+        stressEx: { type: Type.BOOLEAN, description: "Stress exceptionnel" },
+        exams: { type: Type.BOOLEAN, description: "Surcharge pro/exams" },
+        meds: { type: Type.BOOLEAN, description: "Médicaments" },
+        cycle: { type: Type.BOOLEAN, description: "Cycle menstruel sensible" },
+        competition: { type: Type.BOOLEAN, description: "Compétition" },
+        interruptedNight: { type: Type.BOOLEAN, description: "Nuit coupée" },
+        notes: { type: Type.STRING },
+        missingFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
+        requiresValidation: { type: Type.BOOLEAN }
+      },
+      required: ["missingFields", "uncertainFields", "requiresValidation"]
     }
   };
 
@@ -316,9 +339,83 @@ Règles cruciales :
   return JSON.parse(response.text || "{}");
 }
 
+/**
+ * Analyse et reformule pédagogiquement les indicateurs physiologiques de l'athlète.
+ * Fait appel au llm pour écrire un texte en français clair, en évitant le jargon médical.
+ *
+ * @param {GoogleGenAI} aiClient Client GenAI déjà configuré avec la clé secrète
+ * @param {object} profile Profil de l'athlète
+ * @param {object} calculatedScores Scores pré-calculés par le moteur
+ * @param {string} shortSummary Résumé court de base
+ * @param {string} pedagogicalReformulation Reformulation technique
+ * @returns {Promise<object>} L'analyse formatée
+ */
+async function analyzeHealthData(aiClient, profile, calculatedScores, shortSummary, pedagogicalReformulation) {
+  if (!profile || !calculatedScores) {
+    throw new HttpsError("invalid-argument", "Profil d'athlète et scores requis.");
+  }
+
+  const systemInstruction = `
+        Vous êtes un rédacteur et vulgarisateur sportif de haut niveau pour Aura Elite.
+        Votre unique mission est de reformuler de manière pédagogique, fluide et extrêmement bienveillante les résultats déterminés par notre moteur mathématique interne de physiologie sportive.
+        
+        RÈGLES CRUCIALES :
+        1. Vous ne devez JAMAIS effectuer de calculs mathématiques personnels ni modifier les scores et statuts fournis.
+        2. Respectez scrupuleusement les scores calculés par notre moteur :
+           - Score Readiness : ${calculatedScores.performanceReadiness?.score}
+           - Statut Readiness : ${calculatedScores.performanceReadiness?.status}
+           - Score Récupération : ${calculatedScores.recoveryStatus?.score}
+           - Statut Récupération : ${calculatedScores.recoveryStatus?.status}
+           - Statut Sommeil : ${calculatedScores.sleepHealth?.status}
+        3. Utilisez obligatoirement des formulations prudentes, préventives et non médicales pour décrire les limites et contraintes :
+           - Ne posez jamais de diagnostic.
+           - Parlez de "signaux de surcharge à surveiller", "charge aiguë élevée par rapport à l'historique récent", "adaptation recommandée".
+        4. Intégrez l'explication contextuelle suivante fournie par l'Explainability Layer :
+           - "${shortSummary}"
+           - "${pedagogicalReformulation}"
+        
+        Rédigez une synthèse claire d'environ 3 à 4 phrases en français dans la propriété "summary".
+  `;
+
+  const prompt = `
+        Profil de l'athlète : ${JSON.stringify(profile)}
+        Résultats physiologiques internes : ${JSON.stringify(calculatedScores)}
+        
+        Produisez l'analyse reformulée au format JSON respectant strictement le schéma.
+  `;
+
+  const response = await aiClient.models.generateContent({
+    model: "gemini-3.5-flash",
+    contents: prompt,
+    config: {
+      systemInstruction,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          summary: { type: Type.STRING, description: "Synthèse de l'état actuel de récupération." }
+        },
+        required: ["summary"]
+      }
+    }
+  });
+
+  const parsedJSON = JSON.parse(response.text || "{}");
+  return {
+    summary: parsedJSON.summary,
+    usageLog: {
+      feature: "reformulation",
+      model: "gemini-3.5-flash",
+      status: "confirmed",
+      createdAt: new Date().toISOString()
+    }
+  };
+}
+
 module.exports = {
   parseRecipeText,
   parseVoiceForm,
   extractNutritionLabel,
-  analyzeMealPhoto
+  analyzeMealPhoto,
+  analyzeHealthData
 };

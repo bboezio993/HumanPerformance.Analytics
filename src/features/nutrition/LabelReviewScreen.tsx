@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from "react";
-import { OcrDraftSchemaType, OcrNutrientItem } from "../../domain/nutrition/ocrDraftSchema";
+import { OcrDraft, OcrNutrientItem } from "../../domain/nutrition/ocrDraftSchema";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 
 interface LabelReviewScreenProps {
-  ocrResult: OcrDraftSchemaType;
+  ocrResult: OcrDraft;
   onConfirm: (correctedData: {
     productName: string;
     nutrients: OcrNutrientItem[];

@@ -6,7 +6,8 @@
 import React, { useState, useRef } from "react";
 import { useAuth } from "../components/FirebaseProvider";
 import { db } from "../firebase";
-import { doc, setDoc } from "firebase/firestore";
+import { RepositoryProvider } from "../services/RepositoryProvider";
+import { CloudFunctionsGateway } from "../services/cloudFunctionsGateway";
 import { validateAndCleanOcrDraft, OcrNutrientItem } from "../domain/nutrition/ocrDraftSchema";
 import { 
   UploadCloud, 
@@ -19,6 +20,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { LabelReviewScreen } from "../features/nutrition/LabelReviewScreen";
 import { saveUserFoodProduct } from "../services/repository/foodProductRepository";
+import { compressImage } from "../utils/imageUtils";
+import { StorageService } from "../services/storageService";
+import { saveMediaAsset } from "../services/repository/mediaAssetRepository";
 
 export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) => void }) {
   const { user } = useAuth();
@@ -27,19 +31,51 @@ export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) 
   const [error, setError] = useState<string | null>(null);
   const [ocrResult, setOcrResult] = useState<any | null>(null);
   const [success, setSuccess] = useState(false);
+  const [photoId, setPhotoId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImageSrc(reader.result as string);
-      setOcrResult(null);
-      setError(null);
-    };
-    reader.readAsDataURL(files[0]);
+    
+    setLoading(true); // show loading state while compression and upload happens
+    
+    try {
+      const originalFile = files[0];
+      const compressedBlob = await compressImage(originalFile, 1600, 0.8);
+      const fileToUpload = new File([compressedBlob], originalFile.name, { type: 'image/jpeg' });
+      
+      const newPhotoId = `photo_label_${Date.now()}`;
+      setPhotoId(newPhotoId);
+      
+      if (user) {
+        const storagePath = `users/${user.uid}/photos/labels/${newPhotoId}.jpg`;
+        const uploadResult = await StorageService.uploadFile(fileToUpload, storagePath);
+        
+        await saveMediaAsset(user.uid, {
+          id: newPhotoId,
+          url: uploadResult.url,
+          status: "uploaded",
+          sourceType: "ocr_label",
+          storagePath: storagePath
+        });
+        
+        // Convert to base64 for Cloud UI preview and Gateway usage
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImageSrc(reader.result as string);
+          setOcrResult(null);
+          setError(null);
+        };
+        reader.readAsDataURL(fileToUpload);
+      }
+    } catch (err) {
+      console.error("Upload error", err);
+      setError("Erreur lors de l'envoi de l'image.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUploadClick = () => {
@@ -52,25 +88,34 @@ export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) 
     setError(null);
 
     try {
-      const res = await fetch("/api/gemini/extract-nutrition-label", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64: imageSrc })
-      });
+      const rawData = await CloudFunctionsGateway.generateAiInsights('label_ocr', { imageBase64: imageSrc });
 
-      if (!res.ok) {
-        throw new Error("L'intelligence artificielle n'a pas pu décoder l'étiquette. Veuillez prendre une photo plus nette.");
+      const validatedOcr = validateAndCleanOcrDraft(rawData);
+      
+      let draftId;
+      if (user && photoId) {
+        draftId = `draft_ocr_${Date.now()}`;
+        try {
+          await RepositoryProvider.getRepository().saveNutritionDraft({
+            id: draftId,
+            uid: user.uid,
+            sourceType: "label_ocr",
+            sourceRef: photoId || "",
+            extractedJson: validatedOcr,
+            confidence: (validatedOcr as any).overallConfidence || 85,
+            status: "draft",
+            createdAt: new Date().toISOString()
+          });
+        } catch (e) {
+          console.warn("OCR Draft persistence failed", e);
+        }
       }
 
-      const rawData = await res.json();
-      
-      const validatedOcr = validateAndCleanOcrDraft(rawData);
-      setOcrResult(validatedOcr);
+      setOcrResult({ ...validatedOcr, draftId });
 
       if (user && rawData.usageLog) {
         try {
-          const usageDoc = doc(db, "users", user.uid, "aiUsageLogs", rawData.usageLog.id);
-          await setDoc(usageDoc, { ...rawData.usageLog, uid: user.uid });
+          await RepositoryProvider.getRepository().saveAiUsageLog({ ...rawData.usageLog, uid: user.uid });
         } catch (fsErr) {
           console.warn("[Firestore] Skipping logging of usage telemetry:", fsErr);
         }
@@ -137,6 +182,24 @@ export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) 
       carbs: finalCarbs,
       fat: finalFat
     });
+
+    if (user && ocrResult.draftId) {
+      try {
+        await RepositoryProvider.getRepository().saveNutritionDraft({
+            id: ocrResult.draftId,
+            uid: user.uid,
+            sourceType: "label_ocr",
+            sourceRef: photoId || "",
+            extractedJson: ocrResult,
+            confidence: (ocrResult as any).overallConfidence || 85,
+            status: "confirmed",
+            userCorrections: correctedData,
+            createdAt: new Date().toISOString()
+        });
+      } catch (e) {
+        console.warn("Failed to update draft as confirmed", e);
+      }
+    }
 
     setSuccess(true);
     setTimeout(() => {
