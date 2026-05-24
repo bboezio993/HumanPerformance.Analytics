@@ -25,6 +25,7 @@ const { checkAndIncrementQuota } = require("./src/quota");
 const { recordAiUsage } = require("./src/aiUsage");
 const { lookupBarcode } = require("./src/openFoodFacts");
 const { deleteMediaFileAndLog } = require("./src/media");
+const { getAiCache, setAiCache } = require("./src/aiCache");
 const {
   parseRecipeText,
   parseVoiceForm,
@@ -69,6 +70,23 @@ exports.verifyBarcode = exports.lookupOpenFoodFacts;
  */
 exports.parseRecipeText = authenticatedCallable({ secrets: [geminiApiKeySecret] }, async (request, uid) => {
   const { recipeText } = request.data;
+  const crypto = require("crypto");
+  const inputHash = crypto.createHash("md5").update(recipeText || "").digest("hex");
+
+  // 1. Check Cache
+  const cachedDraft = await getAiCache(uid, inputHash);
+  if (cachedDraft) {
+    const log = await recordAiUsage(uid, {
+      feature: "recipe_text",
+      model: "gemini-3.5-flash",
+      inputHash,
+      cached: true,
+      status: "confirmed"
+    });
+    return { draft: cachedDraft, log };
+  }
+
+  // 2. Check Quota
   const quota = await checkAndIncrementQuota(uid, "recipe_text");
   if (!quota.allowed) {
     throw new HttpsError("resource-exhausted", "Le quota d'analyse de recette d'aujourd'hui est épuisé.");
@@ -77,8 +95,8 @@ exports.parseRecipeText = authenticatedCallable({ secrets: [geminiApiKeySecret] 
   const aiClient = getAiClient();
   const draft = await parseRecipeText(aiClient, recipeText);
 
-  const crypto = require("crypto");
-  const inputHash = crypto.createHash("md5").update(recipeText || "").digest("hex");
+  // 3. Update Cache
+  await setAiCache(uid, inputHash, draft);
 
   const log = await recordAiUsage(uid, {
     feature: "recipe_text",
@@ -97,6 +115,23 @@ exports.parseRecipeText = authenticatedCallable({ secrets: [geminiApiKeySecret] 
  */
 exports.parseVoiceForm = authenticatedCallable({ secrets: [geminiApiKeySecret] }, async (request, uid) => {
   const { transcript, formType } = request.data;
+  const crypto = require("crypto");
+  const inputHash = crypto.createHash("md5").update(`${formType}_${transcript}`).digest("hex");
+
+  // 1. Check Cache
+  const cachedDraft = await getAiCache(uid, inputHash);
+  if (cachedDraft) {
+    const log = await recordAiUsage(uid, {
+      feature: "voice_form",
+      model: "gemini-3.5-flash",
+      inputHash,
+      cached: true,
+      status: "confirmed"
+    });
+    return { draft: cachedDraft, log };
+  }
+
+  // 2. Check Quota
   const quota = await checkAndIncrementQuota(uid, "voice_form");
   if (!quota.allowed) {
     throw new HttpsError("resource-exhausted", "Le quota journalier de dictée vocale est dépassé.");
@@ -105,8 +140,8 @@ exports.parseVoiceForm = authenticatedCallable({ secrets: [geminiApiKeySecret] }
   const aiClient = getAiClient();
   const draft = await parseVoiceForm(aiClient, transcript, formType);
 
-  const crypto = require("crypto");
-  const inputHash = crypto.createHash("md5").update(`${formType}_${transcript}`).digest("hex");
+  // 3. Update Cache
+  await setAiCache(uid, inputHash, draft);
 
   const log = await recordAiUsage(uid, {
     feature: "voice_form",
@@ -125,6 +160,23 @@ exports.parseVoiceForm = authenticatedCallable({ secrets: [geminiApiKeySecret] }
  */
 exports.extractNutritionLabel = authenticatedCallable({ secrets: [geminiApiKeySecret] }, async (request, uid) => {
   const { imageBase64 } = request.data;
+  const crypto = require("crypto");
+  const inputHash = crypto.createHash("md5").update(imageBase64?.substring(0, 1000) || "").digest("hex");
+
+  // 1. Check Cache
+  const cachedDraft = await getAiCache(uid, inputHash);
+  if (cachedDraft) {
+    const log = await recordAiUsage(uid, {
+      feature: "label_ocr",
+      model: "gemini-3.5-flash",
+      inputHash,
+      cached: true,
+      status: "confirmed"
+    });
+    return { draft: cachedDraft, log };
+  }
+
+  // 2. Check Quota
   const quota = await checkAndIncrementQuota(uid, "label_ocr");
   if (!quota.allowed) {
     throw new HttpsError("resource-exhausted", "Quota journalier d'analyse OCR d'étiquettes épuisé.");
@@ -133,8 +185,8 @@ exports.extractNutritionLabel = authenticatedCallable({ secrets: [geminiApiKeySe
   const aiClient = getAiClient();
   const draft = await extractNutritionLabel(aiClient, imageBase64);
 
-  const crypto = require("crypto");
-  const inputHash = crypto.createHash("md5").update(imageBase64?.substring(0, 1000) || "").digest("hex");
+  // 3. Update Cache
+  await setAiCache(uid, inputHash, draft);
 
   const log = await recordAiUsage(uid, {
     feature: "label_ocr",
@@ -153,6 +205,23 @@ exports.extractNutritionLabel = authenticatedCallable({ secrets: [geminiApiKeySe
  */
 exports.analyzeMealPhoto = authenticatedCallable({ secrets: [geminiApiKeySecret] }, async (request, uid) => {
   const { imageBase64 } = request.data;
+  const crypto = require("crypto");
+  const inputHash = crypto.createHash("md5").update(imageBase64?.substring(0, 1000) || "").digest("hex");
+
+  // 1. Check Cache
+  const cachedDraft = await getAiCache(uid, inputHash);
+  if (cachedDraft) {
+    const log = await recordAiUsage(uid, {
+      feature: "meal_photo",
+      model: "gemini-3.5-flash",
+      inputHash,
+      cached: true,
+      status: "confirmed"
+    });
+    return { draft: cachedDraft, log };
+  }
+
+  // 2. Check Quota
   const quota = await checkAndIncrementQuota(uid, "meal_photo");
   if (!quota.allowed) {
     throw new HttpsError("resource-exhausted", "Quota d'analyse visuelle de photo repas atteint pour aujourd'hui.");
@@ -161,8 +230,8 @@ exports.analyzeMealPhoto = authenticatedCallable({ secrets: [geminiApiKeySecret]
   const aiClient = getAiClient();
   const draft = await analyzeMealPhoto(aiClient, imageBase64);
 
-  const crypto = require("crypto");
-  const inputHash = crypto.createHash("md5").update(imageBase64?.substring(0, 1000) || "").digest("hex");
+  // 3. Update Cache
+  await setAiCache(uid, inputHash, draft);
 
   const log = await recordAiUsage(uid, {
     feature: "meal_photo",
@@ -181,6 +250,26 @@ exports.analyzeMealPhoto = authenticatedCallable({ secrets: [geminiApiKeySecret]
  */
 exports.analyzeHealthData = authenticatedCallable({ secrets: [geminiApiKeySecret] }, async (request, uid) => {
   const { profile, calculatedScores, shortSummary, pedagogicalReformulation } = request.data;
+  
+  // Hash includes scores status and profile values to detect changes
+  const crypto = require("crypto");
+  const hashPayload = `${uid}_${calculatedScores?.performanceReadiness?.score || 0}_${calculatedScores?.performanceReadiness?.status || ""}`;
+  const inputHash = crypto.createHash("md5").update(hashPayload).digest("hex");
+
+  // 1. Check Cache
+  const cachedData = await getAiCache(uid, inputHash);
+  if (cachedData) {
+    const log = await recordAiUsage(uid, {
+      feature: "reformulation",
+      model: "gemini-3.5-flash",
+      inputHash,
+      cached: true,
+      status: "confirmed"
+    });
+    return { summary: cachedData.summary, log };
+  }
+
+  // 2. Check Quota
   const quota = await checkAndIncrementQuota(uid, "reformulation");
   if (!quota.allowed) {
     throw new HttpsError("resource-exhausted", "Quota d'analyse de santé atteint pour aujourd'hui.");
@@ -189,10 +278,13 @@ exports.analyzeHealthData = authenticatedCallable({ secrets: [geminiApiKeySecret
   const aiClient = getAiClient();
   const result = await analyzeHealthData(aiClient, profile, calculatedScores, shortSummary, pedagogicalReformulation);
 
+  // 3. Update Cache
+  await setAiCache(uid, inputHash, result);
+
   const log = await recordAiUsage(uid, {
     feature: "reformulation",
     model: "gemini-3.5-flash",
-    inputHash: uid + "_" + Date.now(),
+    inputHash,
     cached: false,
     status: "confirmed"
   });

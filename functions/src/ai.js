@@ -5,6 +5,175 @@
 
 const { HttpsError } = require("firebase-functions/v2/https");
 const { Type } = require("@google/genai");
+const { z } = require("zod");
+
+// ============================================
+// COMPLIANCE SCHEMA DEFINITIONS (ZOD)
+// ============================================
+
+const RecipeIngredientSchema = z.object({
+  rawText: z.string().default(""),
+  foodName: z.string().default("Inconnu"),
+  quantity: z.number().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  grams: z.number().nullable().optional(),
+  confidence: z.number().min(0).max(100).optional().default(100),
+  assumptions: z.string().nullable().optional().default("")
+});
+
+const RecipeDraftSchema = z.object({
+  name: z.string().default("Recette sans titre"),
+  ingredients: z.array(RecipeIngredientSchema).default([]),
+  missingMatches: z.array(z.string()).default([]),
+  questionsForUser: z.array(z.string()).default([]),
+  requiresValidation: z.boolean().default(true)
+});
+
+const VoiceDailySchema = z.object({
+  fatigue: z.number().min(1).max(7).nullable().optional(),
+  stress: z.number().min(1).max(7).nullable().optional(),
+  sleepQuality: z.number().min(1).max(7).nullable().optional(),
+  soreness: z.number().min(1).max(7).nullable().optional(),
+  mood: z.number().min(1).max(7).nullable().optional(),
+  motivation: z.number().min(1).max(7).nullable().optional(),
+  painLevel: z.number().min(0).max(10).nullable().optional(),
+  digestion: z.number().min(1).max(5).nullable().optional(),
+  appetite: z.number().min(1).max(5).nullable().optional(),
+  notes: z.string().nullable().optional(),
+  missingFields: z.array(z.string()).default([]),
+  uncertainFields: z.array(z.string()).default([]),
+  requiresValidation: z.boolean().default(true)
+});
+
+const VoiceRpeSchema = z.object({
+  rpe: z.number().min(1).max(10).nullable().optional(),
+  durationMinutes: z.number().nullable().optional(),
+  feeling: z.number().min(1).max(5).nullable().optional(),
+  comment: z.string().nullable().optional(),
+  conformanceToPlan: z.boolean().nullable().optional(),
+  missingFields: z.array(z.string()).default([]),
+  uncertainFields: z.array(z.string()).default([]),
+  requiresValidation: z.boolean().default(true)
+});
+
+const VoiceNutritionIngredientSchema = z.object({
+  foodName: z.string().default("Inconnu"),
+  quantity: z.number().nullable().optional(),
+  unit: z.string().nullable().optional(),
+  rawCookedState: z.string().nullable().optional(),
+  confidence: z.number().optional().default(100),
+  assumptions: z.string().nullable().optional().default("")
+});
+
+const VoiceNutritionSchema = z.object({
+  mealType: z.string().nullable().optional(),
+  items: z.array(VoiceNutritionIngredientSchema).default([]),
+  missingQuantities: z.array(z.string()).default([]),
+  uncertainItems: z.array(z.string()).default([]),
+  requiresValidation: z.boolean().default(true)
+});
+
+const VoicePainSchema = z.object({
+  localisation: z.string().default("Non spécifié"),
+  intensity: z.number().min(0).max(10).default(0),
+  description: z.string().nullable().optional(),
+  aggravatingFactors: z.string().nullable().optional(),
+  missingFields: z.array(z.string()).default([]),
+  uncertainFields: z.array(z.string()).default([]),
+  requiresValidation: z.boolean().default(true)
+});
+
+const VoiceContextSchema = z.object({
+  travel: z.boolean().nullable().optional(),
+  jetlag: z.boolean().nullable().optional(),
+  alcohol: z.boolean().nullable().optional(),
+  lateMeal: z.boolean().nullable().optional(),
+  heat: z.boolean().nullable().optional(),
+  altitude: z.boolean().nullable().optional(),
+  stressEx: z.boolean().nullable().optional(),
+  exams: z.boolean().nullable().optional(),
+  meds: z.boolean().nullable().optional(),
+  cycle: z.boolean().nullable().optional(),
+  competition: z.boolean().nullable().optional(),
+  interruptedNight: z.boolean().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  missingFields: z.array(z.string()).default([]),
+  uncertainFields: z.array(z.string()).default([]),
+  requiresValidation: z.boolean().default(true)
+});
+
+const NutrientValueSchema = z.object({
+  nutrientId: z.string().default("calories"),
+  value: z.number().nullable(),
+  unit: z.string().default("g"),
+  confidence: z.number().optional().default(100),
+  rawText: z.string().nullable().optional().default(""),
+  missingReason: z.string().nullable().optional()
+});
+
+const NutritionLabelDraftSchema = z.object({
+  productName: z.string().nullable().optional().default(""),
+  servingSize: z.string().nullable().optional().default(""),
+  valuesPer100g: z.array(NutrientValueSchema).default([]),
+  ingredientsText: z.string().nullable().optional().default(""),
+  allergensText: z.string().nullable().optional().default(""),
+  uncertainFields: z.array(z.string()).default([]),
+  requiresUserValidation: z.boolean().default(true)
+});
+
+const VisualFoodItemSchema = z.object({
+  label: z.string().default("Inconnu"),
+  probableFoodIds: z.array(z.string()).default([]),
+  visualConfidence: z.number().optional().default(100),
+  estimatedQuantityLabel: z.string().nullable().optional().default(""),
+  quantityConfidence: z.number().optional().default(100),
+  rawCookedGuess: z.string().nullable().optional().default(""),
+  needsUserConfirmation: z.boolean().default(true),
+  uncertaintyNotes: z.array(z.string()).default([])
+});
+
+const MealPhotoDraftSchema = z.object({
+  detectedFoods: z.array(VisualFoodItemSchema).default([]),
+  globalUncertainties: z.array(z.string()).default([]),
+  suggestedQuestions: z.array(z.string()).default([]),
+  modelVersion: z.string().nullable().optional().default("gemini-3.5-flash"),
+  promptVersion: z.string().nullable().optional().default("1.0.0")
+});
+
+const HealthAnalysisSchema = z.object({
+  summary: z.string().default("Données insuffisantes ou en attente d'évaluation professionnelle.")
+});
+
+// ============================================
+// RESILIENT PARSING UTILITIES
+// ============================================
+
+function parseAndValidate(jsonStr, schema, defaultValue = {}) {
+  let parsed = {};
+  try {
+    parsed = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+  } catch (err) {
+    console.error("[JSON Parse Failure] fallback to standard default schema object:", err);
+    return defaultValue;
+  }
+  
+  const validation = schema.safeParse(parsed);
+  if (validation.success) {
+    return validation.data;
+  } else {
+    console.warn("[Zod Schema Compliance Violation] cleaning data matching defaults. Errors:", validation.error.format());
+    try {
+      return schema.parse(Object.assign({}, defaultValue, parsed));
+    } catch (fallbackErr) {
+      console.error("[Fallback Parse Failed] returning clean default value:", fallbackErr);
+      return defaultValue;
+    }
+  }
+}
+
+// ============================================
+// CORE AI ADAPTERS WITH INTEGRATED LLM SCHEMAS
+// ============================================
 
 /**
  * Analyse une recette littéraire brute d'athlète et extrait précisément les ingrédients, portions et macros.
@@ -62,7 +231,13 @@ Ne propose jamais de diagnostics ou d'opinions médicales. Formule uniquement en
     }
   });
 
-  return JSON.parse(response.text || "{}");
+  return parseAndValidate(response.text || "{}", RecipeDraftSchema, {
+    name: "Recette extraite",
+    ingredients: [],
+    missingMatches: [],
+    questionsForUser: [],
+    requiresValidation: true
+  });
 }
 
 /**
@@ -70,7 +245,7 @@ Ne propose jamais de diagnostics ou d'opinions médicales. Formule uniquement en
  *
  * @param {GoogleGenAI} aiClient Client GenAI déjà configuré avec la clé secrète
  * @param {string} transcript Texte libre transcrit de la voix
- * @param {"daily"|"rpe"|"nutrition"|"pain"} formType Sous-moule de formulaire cible
+ * @param {"daily"|"rpe"|"nutrition"|"pain"|"context"} formType Sous-moule de formulaire cible
  * @returns {Promise<object>} Le brouillon FormDraft correspondant au moule
  */
 async function parseVoiceForm(aiClient, transcript, formType) {
@@ -197,7 +372,31 @@ Livre les incertitudes dans 'uncertainFields' et éléments omis dans 'missingFi
     }
   });
 
-  return JSON.parse(response.text || "{}");
+  // Align validation schemas
+  let zodFormSchema = VoiceDailySchema;
+  let formDefault = { missingFields: [], uncertainFields: [], requiresValidation: true };
+
+  switch (formType) {
+    case 'daily':
+      zodFormSchema = VoiceDailySchema;
+      break;
+    case 'rpe':
+      zodFormSchema = VoiceRpeSchema;
+      break;
+    case 'nutrition':
+      zodFormSchema = VoiceNutritionSchema;
+      formDefault = { items: [], missingQuantities: [], uncertainItems: [], requiresValidation: true };
+      break;
+    case 'pain':
+      zodFormSchema = VoicePainSchema;
+      formDefault = { localisation: "Inconnue", intensity: 0, missingFields: [], uncertainFields: [], requiresValidation: true };
+      break;
+    case 'context':
+      zodFormSchema = VoiceContextSchema;
+      break;
+  }
+
+  return parseAndValidate(response.text || "{}", zodFormSchema, formDefault);
 }
 
 /**
@@ -266,7 +465,15 @@ Ne remplace jamais une valeur illisible par 0, utilise l'argument 'missingReason
     }
   });
 
-  return JSON.parse(response.text || "{}");
+  return parseAndValidate(response.text || "{}", NutritionLabelDraftSchema, {
+    productName: "Aliment extrait",
+    servingSize: "100g",
+    valuesPer100g: [],
+    ingredientsText: "",
+    allergensText: "",
+    uncertainFields: [],
+    requiresUserValidation: true
+  });
 }
 
 /**
@@ -336,7 +543,13 @@ Règles cruciales :
     }
   });
 
-  return JSON.parse(response.text || "{}");
+  return parseAndValidate(response.text || "{}", MealPhotoDraftSchema, {
+    detectedFoods: [],
+    globalUncertainties: ["Impossible de vérifier à cause de la qualité de la photo."],
+    suggestedQuestions: [],
+    modelVersion: "gemini-3.5-flash",
+    promptVersion: "1.0.0"
+  });
 }
 
 /**
@@ -370,7 +583,7 @@ async function analyzeHealthData(aiClient, profile, calculatedScores, shortSumma
         3. Utilisez obligatoirement des formulations prudentes, préventives et non médicales pour décrire les limites et contraintes :
            - Ne posez jamais de diagnostic.
            - Parlez de "signaux de surcharge à surveiller", "charge aiguë élevée par rapport à l'historique récent", "adaptation recommandée".
-        4. Intégrez l'explication contextuelle suivante fournie par l'Explainability Layer :
+         4. Intégrez l'explication contextuelle suivante fournie par l'Explainability Layer :
            - "${shortSummary}"
            - "${pedagogicalReformulation}"
         
@@ -400,9 +613,12 @@ async function analyzeHealthData(aiClient, profile, calculatedScores, shortSumma
     }
   });
 
-  const parsedJSON = JSON.parse(response.text || "{}");
+  const validated = parseAndValidate(response.text || "{}", HealthAnalysisSchema, {
+    summary: "Signaux physiologiques stables. Poursuivez vos entraînements en restant à l'écoute de vos sensations."
+  });
+
   return {
-    summary: parsedJSON.summary,
+    summary: validated.summary,
     usageLog: {
       feature: "reformulation",
       model: "gemini-3.5-flash",

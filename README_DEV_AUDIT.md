@@ -127,3 +127,9 @@ L'accès aux données respecte le principe d'abstraction via une interface contr
 *   **Problématique** : L'absence de vérification automatique au push des règles Firestore et du moteur de l'Analysis Engine expose le dépôt à des régressions lors de modifications incrémentales de types ou de seuils d'optimalité.
 *   **Sévérité** : **FAIBLE**. Confort de livraison.
 *   **Mesure d'atténuation (Sprint 12)** : Paramétrer d'ici la livraison finale des Workflows GitHub Actions stricts rejetant toute modification dont le lint de non-émission, les builds de bundle ou les scans de sécurité défaillent.
+
+### 🔒 Recommandation relative aux risques techniques mineurs (Administration & Déploiement)
+*   **Problématique** : Nécessité critique de rappeler aux administrateurs de provisionner l'API d'authentification (Firebase Auth) et de stocker en toute sécurité la clé secrète `GEMINI_API_KEY` dans Google Secret Manager avant tout déploiement de Cloud Functions, afin de garantir l'étanchéité des requêtes et l'intégrité de l'environnement serverless.
+*   **Sévérité** : **FAIBLE / MINEURE**. Intégrité de la sécurité et du déploiement.
+*   **Mesure d'atténuation (Sprint E)** : Intégrer des alertes d'environnement explicites et répertorier des consignes de déploiement officielles dans la documentation technique du dépôt et au sein du workflow de setup administratif.
+

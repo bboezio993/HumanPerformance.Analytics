@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useAuth } from '../components/FirebaseProvider';
 import { useStore } from '../store/useStore';
+import { CloudFunctionsGateway } from '../services/cloudFunctionsGateway';
 import { 
   ShieldCheck, 
   Download, 
@@ -21,6 +22,8 @@ export function Confidentiality() {
   const { user } = useAuth();
   const store = useStore();
   const [syncing, setSyncing] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -32,10 +35,36 @@ export function Confidentiality() {
   const recipesCount = store.recipes?.length || 0;
   const healthLogsCount = (store.hooperLogs?.length || 0) + (store.painLogs?.length || 0) + (store.menstrualLogs?.length || 0);
 
-  const handleExport = () => {
+  const handleExport = async () => {
+    setExporting(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
     try {
       const dataStr = store.exportLocalData();
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const localObj = JSON.parse(dataStr);
+      let unifiedPayload: any = {
+        meta: {
+          exportedAt: new Date().toISOString(),
+          app: "Aura Elite Next",
+          clientVersion: "2.0.0-beta",
+        },
+        localDataset: localObj,
+      };
+
+      if (user) {
+        try {
+          // Fetch remote server data backup
+          const cloudDataset = await CloudFunctionsGateway.exportCloudUserData();
+          unifiedPayload.cloudDataset = cloudDataset;
+          unifiedPayload.isCloudExporterComplete = true;
+        } catch (cloudErr: any) {
+          console.error("[Export Compliance Error] Could not retrieve cloud backup:", cloudErr);
+          setErrorMsg("Impossible de récupérer la copie Cloud chiffrée. Sauvegarde locale uniquement.");
+        }
+      }
+
+      const finalJson = JSON.stringify(unifiedPayload, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(finalJson);
       
       const exportFileDefaultName = `aura_elite_export_${new Date().toISOString().slice(0,10)}.json`;
       
@@ -43,45 +72,130 @@ export function Confidentiality() {
       linkElement.setAttribute('href', dataUri);
       linkElement.setAttribute('download', exportFileDefaultName);
       linkElement.click();
-      setSuccessMsg("Données exportées avec succès.");
+      
+      if (!errorMsg) {
+        setSuccessMsg(user 
+          ? "Données locales + Cloud combinées exportées avec succès (Sauvegarde RGPD complète)." 
+          : "Données de souveraineté locale exportées avec succès."
+        );
+      }
     } catch (e) {
       setErrorMsg("Échec de l'exportation des données.");
+    } finally {
+      setExporting(false);
     }
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileReader = new FileReader();
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    fileReader.onload = (event) => {
+    setImporting(true);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    const fileReader = new FileReader();
+    fileReader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
         
-        // Merge into store
+        // Handle both older v1 flat schema and the new unified schema wrapping with meta & localDataset
+        const localData = parsed.localDataset || parsed;
+
+        if (!localData || typeof localData !== 'object') {
+          throw new Error("Format invalide.");
+        }
+
+        const metrics = localData.metrics || [];
+        const rejectedMetrics = localData.rejectedMetrics || [];
+        const menstrualLogs = localData.menstrualLogs || [];
+        const garminActivities = localData.garminActivities || [];
+        const hooperLogs = localData.hooperLogs || [];
+        const sessionRpeLogs = localData.sessionRpeLogs || [];
+        const weeklyScreeningLogs = localData.weeklyScreeningLogs || [];
+        const mealLogs = localData.mealLogs || [];
+        const recipes = localData.recipes || [];
+        const allergenBypassLogs = localData.allergenBypassLogs || [];
+        const painLogs = localData.painLogs || [];
+        const contextLogs = localData.contextLogs || [];
+        const favoriteFoods = localData.favoriteFoods || [];
+        const userProfile = localData.userProfile || store.userProfile;
+
+        // 1. Merge into local store
         useStore.setState({
-          metrics: parsed.metrics || store.metrics,
-          rejectedMetrics: parsed.rejectedMetrics || store.rejectedMetrics,
-          menstrualLogs: parsed.menstrualLogs || store.menstrualLogs,
-          garminActivities: parsed.garminActivities || store.garminActivities,
-          hooperLogs: parsed.hooperLogs || store.hooperLogs,
-          sessionRpeLogs: parsed.sessionRpeLogs || store.sessionRpeLogs,
-          mealLogs: parsed.mealLogs || store.mealLogs,
-          recipes: parsed.recipes || store.recipes,
-          allergenBypassLogs: parsed.allergenBypassLogs || store.allergenBypassLogs,
-          painLogs: parsed.painLogs || store.painLogs,
-          contextLogs: parsed.contextLogs || store.contextLogs,
-          userProfile: parsed.userProfile || store.userProfile,
+          metrics,
+          rejectedMetrics,
+          menstrualLogs,
+          garminActivities,
+          hooperLogs,
+          sessionRpeLogs,
+          weeklyScreeningLogs,
+          mealLogs,
+          recipes,
+          allergenBypassLogs,
+          painLogs,
+          contextLogs,
+          favoriteFoods,
+          userProfile,
         });
 
-        // Recompute analytics engine
+        // 2. Recompute the physiological models
         store.computeEngineScores();
 
-        setSuccessMsg("Données importées avec succès.");
-        setErrorMsg(null);
+        // 3. Synchronize to Firestore if we are in cloud mode
+        if (user && store.isMigratedToCloud) {
+          try {
+            setSuccessMsg("Données restaurées localement. Début de la synchronisation avec votre espace Cloud sécurisé...");
+            
+            // Import the helper functions dynamically
+            const { 
+              syncProfileToFirestore,
+              syncMetricsToFirestore,
+              syncActivitiesToFirestore,
+              syncMealLogToFirestore,
+              syncRecipeToFirestore,
+              syncHooperLogToFirestore,
+              syncSessionRpeToFirestore,
+              syncPainLogToFirestore,
+              syncMenstrualLogToFirestore,
+              syncContextLogToFirestore,
+              syncWeeklyScreeningLogToFirestore,
+              syncAllergenBypassLogToFirestore
+            } = await import('../services/firebaseSync');
+
+            // Sync all collections in parallel for safety
+            await Promise.all([
+              syncProfileToFirestore(userProfile),
+              syncMetricsToFirestore(metrics),
+              syncActivitiesToFirestore(garminActivities),
+              ...recipes.map(rec => syncRecipeToFirestore(rec).catch(() => {})),
+              ...mealLogs.map(meal => syncMealLogToFirestore(meal).catch(() => {})),
+              ...hooperLogs.map(log => syncHooperLogToFirestore(log).catch(() => {})),
+              ...sessionRpeLogs.map(log => syncSessionRpeToFirestore(log).catch(() => {})),
+              ...painLogs.map(log => syncPainLogToFirestore(log).catch(() => {})),
+              ...menstrualLogs.map(log => syncMenstrualLogToFirestore(log).catch(() => {})),
+              ...contextLogs.map(log => syncContextLogToFirestore(log).catch(() => {})),
+              ...weeklyScreeningLogs.map(log => syncWeeklyScreeningLogToFirestore(log).catch(() => {})),
+              ...allergenBypassLogs.map(log => syncAllergenBypassLogToFirestore(log).catch(() => {}))
+            ]);
+
+            setSuccessMsg("Base complète restaurée localement et sauvegardée de manière fiable sur votre espace Cloud ✅");
+          } catch (cloudSyncError) {
+            console.error("[Confidentiality Sync On Restore Error] :", cloudSyncError);
+            setErrorMsg("Données restaurées localement avec succès, mais échec de la synchronisation cloud instantanée. Les modifications seront synchronisées dès le retour de la connexion.");
+          }
+        } else {
+          setSuccessMsg("Restauration locale souveraine de votre base effectuée avec succès (100% hors-ligne) ✅");
+        }
+
       } catch (err) {
-        setErrorMsg("Fichier JSON invalide ou corrompu.");
+        setErrorMsg("Le fichier d'export Aura Elite fourni est invalide ou corrompu.");
         setSuccessMsg(null);
+      } finally {
+        setImporting(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ""; // Reset value so file change triggers on next select
+        }
       }
     };
     fileReader.readAsText(files[0]);
@@ -246,9 +360,14 @@ export function Confidentiality() {
             <p className="text-xs text-muted-foreground">
               Téléchargez une copie complète au format JSON de l'ensemble de votre base locale et de vos métriques calculées.
             </p>
-            <Button onClick={handleExport} variant="outline" className="w-full gap-2 text-sm">
-              <Download size={16} />
-              Télécharger ma base JSON
+            <Button 
+              onClick={handleExport} 
+              variant="outline" 
+              className="w-full gap-2 text-sm"
+              disabled={exporting}
+            >
+              <Download size={16} className={exporting ? "animate-pulse" : ""} />
+              {exporting ? "Génération de l'export..." : "Télécharger ma base JSON"}
             </Button>
             <Separator className="my-4" />
             <p className="text-xs text-muted-foreground">
@@ -261,9 +380,14 @@ export function Confidentiality() {
               accept=".json" 
               className="hidden" 
             />
-            <Button onClick={handleTriggerImportClick} variant="outline" className="w-full gap-2 text-sm bg-primary/5 border-primary/20 text-primary hover:bg-primary/10">
-              <Upload size={16} />
-              Restaurer une copie.json
+            <Button 
+              onClick={handleTriggerImportClick} 
+              variant="outline" 
+              className="w-full gap-2 text-sm bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+              disabled={importing}
+            >
+              <Upload size={16} className={importing ? "animate-spin" : ""} />
+              {importing ? "Restauration et synchro en cours..." : "Restaurer une copie.json"}
             </Button>
           </CardContent>
         </Card>

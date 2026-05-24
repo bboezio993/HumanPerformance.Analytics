@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage, StateStorage } from 'zustand/middleware';
 import { get, set as idbSet, del } from 'idb-keyval';
+import { auth } from '../firebase';
 import { NormalizedMetric, ConnectionState, DataSource, UserProfile, MenstrualLog, GarminImportLog, GarminActivity, HooperLog, SessionRPE, LifeContextLog, EngineScores, WeeklyScreeningLog, MealLog, PainLog, RejectedMetric, Recipe, AllergenBypassLog } from '../types';
 import { runAnalysisEngine } from '../services/analysisEngine/engine';
 import { RepositoryProvider } from '../services/RepositoryProvider';
@@ -498,7 +499,7 @@ export const useStore = create<AppState>()(
             updates.weeklyScreeningLogs = [];
             updates.contextLogs = [];
           }
-          if (state.isMigratedToCloud) {
+          if (state.isMigratedToCloud || auth.currentUser) {
             getRepo().clearAllUserDataByDomain(domain).catch((err) => {
               console.error("Failed to clear cloud data by domain:", err);
             });

@@ -19,10 +19,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LabelReviewScreen } from "../features/nutrition/LabelReviewScreen";
-import { saveUserFoodProduct } from "../services/repository/foodProductRepository";
 import { compressImage } from "../utils/imageUtils";
 import { StorageService } from "../services/storageService";
-import { saveMediaAsset } from "../services/repository/mediaAssetRepository";
 
 export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) => void }) {
   const { user } = useAuth();
@@ -53,12 +51,16 @@ export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) 
         const storagePath = `users/${user.uid}/photos/labels/${newPhotoId}.jpg`;
         const uploadResult = await StorageService.uploadFile(fileToUpload, storagePath);
         
-        await saveMediaAsset(user.uid, {
+        await RepositoryProvider.getRepository().saveMediaAsset({
           id: newPhotoId,
+          uid: user.uid,
           url: uploadResult.url,
           status: "uploaded",
           sourceType: "ocr_label",
-          storagePath: storagePath
+          storagePath: storagePath,
+          contentType: fileToUpload.type,
+          size: fileToUpload.size,
+          createdAt: new Date().toISOString()
         });
         
         // Convert to base64 for Cloud UI preview and Gateway usage
@@ -152,7 +154,7 @@ export function LabelOCRCapture({ onAddMealItem }: { onAddMealItem: (item: any) 
     // Sprint 7.5: Create UserFoodProduct to make it reusable
     if (user) {
       try {
-        await saveUserFoodProduct(user.uid, {
+        await RepositoryProvider.getRepository().saveFoodProduct({
           id: foodId,
           name: correctedData.productName,
           servingSize: ocrResult.servingSize,

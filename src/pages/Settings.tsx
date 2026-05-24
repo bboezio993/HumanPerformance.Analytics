@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { User, Activity, Heart, Shield, Bell } from 'lucide-react';
 
 export function Settings() {
+  const navigate = useNavigate();
   const profile = useStore(state => state.userProfile);
   const updateUserProfile = useStore(state => state.updateUserProfile);
 
@@ -130,8 +132,12 @@ export function Settings() {
               Vos données de santé sont sensibles. Vous avez le contrôle total sur leur conservation.
             </p>
             <div className="flex gap-4">
-              <Button variant="outline">Exporter mes données</Button>
-              <Button variant="destructive">Supprimer mon compte</Button>
+              <Button variant="outline" onClick={() => navigate('/confidentiality')}>
+                Gérer l'exportation & les sauvegardes
+              </Button>
+              <Button variant="destructive" onClick={() => navigate('/confidentiality')}>
+                Zone de Danger / Purger les données
+              </Button>
             </div>
           </div>
         </TabsContent>

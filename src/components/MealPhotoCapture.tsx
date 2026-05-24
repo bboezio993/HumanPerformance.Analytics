@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MealPhotoReviewScreen } from "../features/nutrition/MealPhotoReviewScreen";
-import { saveMediaAsset, deleteMediaAsset } from "../services/repository/mediaAssetRepository";
 import { compressImage } from "../utils/imageUtils";
 import { StorageService } from "../services/storageService";
 
@@ -58,12 +57,16 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
         const storagePath = `users/${user.uid}/photos/meals/${newPhotoId}.jpg`;
         const uploadResult = await StorageService.uploadFile(fileToUpload, storagePath);
         
-        await saveMediaAsset(user.uid, {
+        await RepositoryProvider.getRepository().saveMediaAsset({
           id: newPhotoId,
+          uid: user.uid,
           url: uploadResult.url,
           status: "uploaded",
           sourceType: "meal_photo",
-          storagePath: storagePath
+          storagePath: storagePath,
+          contentType: fileToUpload.type,
+          size: fileToUpload.size,
+          createdAt: new Date().toISOString()
         });
         
         // Convert to base64 for Cloud UI preview and Gateway usage
@@ -199,7 +202,7 @@ export function MealPhotoCapture({ onAddMealItem }: { onAddMealItem: (item: any)
     // Sprint 8.5 Photo retention controls
     if (!keepPhoto && user && photoId) {
       try {
-        await deleteMediaAsset(user.uid, photoId, "User elected not to retain photo after analysis.");
+        await RepositoryProvider.getRepository().deleteMediaAsset(photoId, "User elected not to retain photo after analysis.");
       } catch (err) {
         console.warn("Failed to delete media asset:", err);
       }

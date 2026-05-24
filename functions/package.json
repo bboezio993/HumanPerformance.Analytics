@@ -1,0 +1,20 @@
+{
+  "name": "functions",
+  "description": "Aura Elite Next Serverless Cloud Functions",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "@google/genai": "^1.29.0",
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.1",
+    "node-fetch": "^2.7.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "firebase-functions-test": "^3.3.0"
+  }
+}

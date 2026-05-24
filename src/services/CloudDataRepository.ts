@@ -29,6 +29,7 @@ import {
   GarminImportLog
 } from '../types';
 import { useStore } from '../store/useStore';
+import { StorageService } from './storageService';
 
 /**
  * SOURCE OF TRUTH: CLOUD DATA REPOSITORY
@@ -110,6 +111,7 @@ export interface MediaAsset {
   size: number;
   status: "uploaded" | "processing" | "completed" | "deleted" | "failed";
   reasonForDeletion?: string;
+  sourceType?: string;
   createdAt: string;
 }
 
@@ -477,6 +479,22 @@ export const CloudDataRepository: DataRepository = {
     if (!auth.currentUser) return;
     const uid = auth.currentUser.uid;
     const path = `users/${uid}/mediaAssets/${id}`;
+    
+    // First, try to read the document and delete physical file from Storage
+    try {
+      const snap = await getDoc(doc(db, 'users', uid, 'mediaAssets', id));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data && data.storagePath) {
+          await StorageService.deleteFile(data.storagePath).catch(err => {
+            console.error("[Storage Error] Failed physical file deletion:", err);
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to check media asset for physical deletion:", err);
+    }
+
     try {
       if (reason) {
         // Soft delete / mark as deleted to maintain auditing trail according to page 4 specification
@@ -566,7 +584,7 @@ export const CloudDataRepository: DataRepository = {
     // Define target collections mapped to each domain
     const domainsMapping: Record<string, string[]> = {
       metrics: ['metrics', 'activities', 'garminImports'],
-      meals: ['mealLogs', 'recipes', 'allergenBypassLogs', 'favoriteFoods', 'nutritionDrafts', 'foodProducts', 'userFoods', 'photoAnalyses', 'voiceDrafts', 'aiUsageLogs', 'aiCache', 'aiUsageDaily'],
+      meals: ['mealLogs', 'recipes', 'allergenBypassLogs', 'favoriteFoods', 'nutritionDrafts', 'foodProducts', 'foods', 'mediaAssets', 'photoAnalyses', 'voiceDrafts', 'aiUsageLogs', 'aiCache', 'aiUsageDaily'],
       pains: ['painLogs'],
       menstrual: ['menstrualLogs'],
       hooper: ['hooperLogs', 'sessionRpeLogs', 'weeklyScreeningLogs', 'contextLogs'],

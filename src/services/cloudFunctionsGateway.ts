@@ -88,6 +88,9 @@ export class CloudFunctionsGateway {
       case 'meal_photo':
         functionName = 'analyzeMealPhoto';
         break;
+      case 'health_report':
+        functionName = 'analyzeHealthData';
+        break;
       default:
         throw new Error(`Fonctionnalité d'intelligence artificielle non reconnue : ${feature}`);
     }
@@ -96,5 +99,9 @@ export class CloudFunctionsGateway {
       functionName,
       payload
     );
+  }
+
+  public static async exportCloudUserData(): Promise<any> {
+    return this.executeWithResilience<any>('exportUserData', {});
   }
 }

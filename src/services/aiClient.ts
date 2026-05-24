@@ -7,6 +7,7 @@ import { UserProfile, AnalysisResult } from "../types";
 import { runAnalysisEngine } from "./analysisEngine/engine";
 import { useStore } from "../store/useStore";
 import { runExplainabilityLayer } from "./analysisEngine/explainabilityLayer";
+import { CloudFunctionsGateway } from "./cloudFunctionsGateway";
 
 /**
  * Analyse et reformule pédagogiquement les indicateurs physiologiques de l'athlète.
@@ -25,24 +26,12 @@ export async function analyzeHealthData(
   const explainability = runExplainabilityLayer(storeState);
 
   try {
-    const response = await fetch("/api/gemini/analyze-health-data", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        profile,
-        calculatedScores,
-        shortSummary: explainability.shortSummary,
-        pedagogicalReformulation: explainability.pedagogicalReformulation,
-      }),
+    const data = await CloudFunctionsGateway.generateAiInsights('health_report', {
+      profile,
+      calculatedScores,
+      shortSummary: explainability.shortSummary,
+      pedagogicalReformulation: explainability.pedagogicalReformulation,
     });
-
-    if (!response.ok) {
-      throw new Error(`Erreur HTTP ${response.status} lors de l'appel proxy.`);
-    }
-
-    const data = await response.json();
 
     // Mappage strict des statuts déterminé par le moteur déterministe
     let mappedStatus: "optimal" | "stable" | "strained" | "critical" = "stable";
